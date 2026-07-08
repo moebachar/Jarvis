@@ -67,7 +67,7 @@ info "Installing jarvis[$USE_EXTRAS] from $REPO …"
 INSTALL_ARGS=(-m pipx install --force "$REPO[$USE_EXTRAS]")
 [ -n "$USE_PYTHON" ] && INSTALL_ARGS+=(--python "$USE_PYTHON")
 "$PY" "${INSTALL_ARGS[@]}"
-ok "jarvis installed."
+ok "jarvis installed. (Machine profile saved to ~/.jarvis/machine.toml.)"
 
 # 5. GPU runtime --------------------------------------------------------------------------
 if [ "$USE_GPU" = "1" ]; then
@@ -84,15 +84,7 @@ if [ "$USE_CLONE" = "1" ]; then
   "$PY" -m pipx runpip jarvis install torch torchaudio --index-url "https://download.pytorch.org/whl/$USE_CUDA"
 fi
 
-# 7. Persist the resolved profile ---------------------------------------------------------
-MI=(--machine-init); [ "$USE_GPU" = "1" ] && MI+=(--gpu) || MI+=(--no-gpu); [ "$USE_CLONE" = "1" ] && MI+=(--clone)
-if command -v jarvis >/dev/null 2>&1 && jarvis "${MI[@]}"; then
-  ok "Machine profile saved to ~/.jarvis/machine.toml."
-else
-  warn "Couldn't write the profile via jarvis (PATH?). Run: jarvis ${MI[*]}"
-fi
-
-# 8. Claude CLI ---------------------------------------------------------------------------
+# 7. Claude CLI ---------------------------------------------------------------------------
 if command -v claude >/dev/null 2>&1; then ok "Claude CLI found — the brain uses your subscription via it."
 else
   warn "Claude CLI not found. The brain needs it (subscription auth). Install + log in:"
@@ -100,7 +92,7 @@ else
 fi
 [ -n "${ANTHROPIC_API_KEY:-}" ] && warn "ANTHROPIC_API_KEY is set; Jarvis unsets it per-run, but consider removing it."
 
-# 9. Done ---------------------------------------------------------------------------------
+# 8. Done ---------------------------------------------------------------------------------
 echo
 ok "Installed. Next:"
 echo "    cd <any project>"

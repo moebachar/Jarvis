@@ -110,10 +110,16 @@ def resolve_profile(env: dict) -> dict:
 
 
 if __name__ == "__main__":
-    # Print the resolved profile as KEY=VALUE lines for install.ps1 / install.sh to parse.
+    # For install.ps1 / install.sh: resolve this machine's profile, PERSIST it to
+    # ~/.jarvis/machine.toml (so it doesn't depend on the freshly-installed `jarvis` being on
+    # PATH yet), and print it as KEY=VALUE lines for the shell to parse.
     import os
 
     r = resolve_profile(os.environ)
+    write_machine_profile(
+        gpu=r["GPU"], voice_clone=r["CLONE"], cuda=r["CUDA"],
+        python=r["PYTHON"], extras=r["EXTRAS"],
+    )
     print(f"GPU={'1' if r['GPU'] else '0'}")
     print(f"CLONE={'1' if r['CLONE'] else '0'}")
     print(f"CUDA={r['CUDA']}")
