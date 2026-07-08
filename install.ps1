@@ -76,7 +76,14 @@ $havePipx = $true
 try { & $Py @PyArgs -m pipx --version | Out-Null } catch { $havePipx = $false }
 if (-not $havePipx) {
     Info "Installing pipx (one-time)..."
-    & $Py @PyArgs -m pip install --user --upgrade pipx
+    # `pip install --user` fails inside an active virtualenv; only pass --user outside one.
+    if ($env:VIRTUAL_ENV) {
+        Warn "A virtualenv is active ($env:VIRTUAL_ENV); installing pipx into it (that's fine - pipx"
+        Warn "  still puts the global jarvis command in ~/.local/bin)."
+        & $Py @PyArgs -m pip install --upgrade pipx
+    } else {
+        & $Py @PyArgs -m pip install --user --upgrade pipx
+    }
     & $Py @PyArgs -m pipx ensurepath | Out-Null
     Ok "pipx installed (a new terminal will have it on PATH; this run calls it via python -m)."
 } else {

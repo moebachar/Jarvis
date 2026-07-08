@@ -57,7 +57,13 @@ ok "Profile: GPU=$USE_GPU  clone=$USE_CLONE  extras=$USE_EXTRAS  cuda=$USE_CUDA"
 if "$PY" -m pipx --version >/dev/null 2>&1; then ok "pipx already present."
 else
   info "Installing pipx (one-time)…"
-  "$PY" -m pip install --user --upgrade pipx
+  # `pip install --user` fails inside an active virtualenv; only pass --user outside one.
+  if [ -n "${VIRTUAL_ENV:-}" ]; then
+    warn "A virtualenv is active; installing pipx into it (pipx still puts jarvis in ~/.local/bin)."
+    "$PY" -m pip install --upgrade pipx
+  else
+    "$PY" -m pip install --user --upgrade pipx
+  fi
   "$PY" -m pipx ensurepath >/dev/null || true
   ok "pipx installed (open a new shell for it on PATH; this run calls it via python -m)."
 fi
