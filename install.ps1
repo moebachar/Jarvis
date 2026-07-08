@@ -33,6 +33,17 @@ function Info($m) { Write-Host "==> $m" -ForegroundColor Cyan }
 function Ok($m)   { Write-Host "  * $m" -ForegroundColor Green }
 function Warn($m) { Write-Host "  ! $m" -ForegroundColor Yellow }
 
+# Run pipx via the chosen Python and FAIL LOUDLY on a non-zero exit. (A failing native command
+# does NOT throw in PowerShell, so we must check $LASTEXITCODE ourselves - otherwise a broken
+# step is silently reported as success.)
+function Invoke-Pipx {
+    param([Parameter(Mandatory, ValueFromRemainingArguments = $true)] [string[]] $PipxArgs)
+    & $Py @PyArgs -m pipx @PipxArgs
+    if ($LASTEXITCODE -ne 0) {
+        throw "pipx $($PipxArgs -join ' ') failed (exit $LASTEXITCODE). See the output above."
+    }
+}
+
 # 1. Find a Python interpreter -------------------------------------------------------------
 function Resolve-Python {
     if ($Python) {
@@ -72,18 +83,21 @@ $usePython = $P["PYTHON"]
 Ok "Profile: GPU=$useGpu  clone=$useClone  extras=$useExtras  cuda=$useCuda"
 
 # 3. Ensure pipx (the isolated-app installer) ----------------------------------------------
-$havePipx = $true
-try { & $Py @PyArgs -m pipx --version | Out-Null } catch { $havePipx = $false }
+# Detect pipx by asking Python if the module exists, then check the EXIT CODE (a failing
+# native command doesn't throw, so try/catch would give a false "already present").
+& $Py @PyArgs -c "import importlib.util as u, sys; sys.exit(0 if u.find_spec('pipx') else 1)"
+$havePipx = ($LASTEXITCODE -eq 0)
 if (-not $havePipx) {
     Info "Installing pipx (one-time)..."
     # `pip install --user` fails inside an active virtualenv; only pass --user outside one.
     if ($env:VIRTUAL_ENV) {
         Warn "A virtualenv is active ($env:VIRTUAL_ENV); installing pipx into it (that's fine - pipx"
-        Warn "  still puts the global jarvis command in ~/.local/bin)."
+        Warn "  still puts the global jarvis command on your PATH)."
         & $Py @PyArgs -m pip install --upgrade pipx
     } else {
         & $Py @PyArgs -m pip install --user --upgrade pipx
     }
+    if ($LASTEXITCODE -ne 0) { throw "Failed to install pipx (pip exit $LASTEXITCODE). See the output above." }
     & $Py @PyArgs -m pipx ensurepath | Out-Null
     Ok "pipx installed (a new terminal will have it on PATH; this run calls it via python -m)."
 } else {
@@ -93,15 +107,15 @@ if (-not $havePipx) {
 # 4. Install Jarvis from THIS repo into its own environment --------------------------------
 Info "Installing jarvis[$useExtras] from $RepoPath ..."
 $spec = "$RepoPath[$useExtras]"
-$installArgs = @("-m", "pipx", "install", "--force", $spec)
+$installArgs = @("install", "--force", $spec)
 if ($usePython) { $installArgs += @("--python", $usePython) }
-& $Py @PyArgs @installArgs
+Invoke-Pipx @installArgs
 Ok "jarvis installed. (Machine profile saved to ~/.jarvis/machine.toml.)"
 
 # 5. GPU acceleration (Kokoro / faster-whisper) -------------------------------------------
 if ($useGpu) {
     Info "Injecting onnxruntime-gpu (Kokoro on CUDA)..."
-    & $Py @PyArgs -m pipx inject jarvis onnxruntime-gpu
+    Invoke-Pipx inject jarvis onnxruntime-gpu
     Warn "faster-whisper on GPU also needs CUDA + cuDNN on PATH (nvidia-cublas-cu12 / nvidia-cudnn-cu12)."
 }
 
@@ -109,9 +123,9 @@ if ($useGpu) {
 if ($useClone) {
     Info "Injecting the voice-clone engine (coqui-tts) + a CUDA torch build ($useCuda)..."
     if (-not $usePython) { Warn "coqui-tts prefers Python 3.11; if this fails, re-run with -Python pointing at a Python 3.11." }
-    & $Py @PyArgs -m pipx inject jarvis coqui-tts
+    Invoke-Pipx inject jarvis coqui-tts
     $torchIndex = "https://download.pytorch.org/whl/$useCuda"
-    & $Py @PyArgs -m pipx runpip jarvis install torch torchaudio --index-url $torchIndex
+    Invoke-Pipx runpip jarvis install torch torchaudio --index-url $torchIndex
 }
 
 # 7. Check the Claude CLI (the brain runs on your subscription through it) -----------------
@@ -126,8 +140,16 @@ if ($env:ANTHROPIC_API_KEY) { Warn "ANTHROPIC_API_KEY is set; Jarvis unsets it p
 # 8. Done ----------------------------------------------------------------------------------
 $runtimeDev = "CPU"
 if ($useGpu) { $runtimeDev = "CUDA" }
+# Is `jarvis` already on PATH in THIS session? (pipx ensurepath only affects NEW terminals.)
+$onPath = [bool](Get-Command jarvis -ErrorAction SilentlyContinue)
 Write-Host ""
-Ok "Installed. Runtime will use $runtimeDev on this machine. Next:"
+Ok "Installed. Runtime will use $runtimeDev on this machine."
+if (-not $onPath) {
+    Warn "IMPORTANT: open a NEW terminal (or reopen the VS Code terminal) so the 'jarvis' command"
+    Warn "  is on PATH. It won't be found in THIS window."
+}
+Write-Host ""
+Write-Host "  Then:"
 Write-Host "    cd <any project>"
 Write-Host "    jarvis --init      # optional: scaffold .jarvis/ (config + .env.example)"
 Write-Host "    jarvis             # text REPL   |   jarvis --voice   |   jarvis --remote"
