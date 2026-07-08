@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>J.A.R.V.I.S. — Board</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <link rel="stylesheet" href="/static/board.css" />
+  <!-- vendored (no CDN), same approach as three.module.js -->
+  <script src="/static/vendor/mermaid.min.js"></script>
+  <script src="/static/vendor/chart.umd.min.js"></script>
+</head>
+<body class="board-page">
+  <!-- the infinite board: a fixed viewport with a pannable/zoomable world inside -->
+  <div id="viewport">
+    <div id="world"></div>
+  </div>
+
+  <!-- empty-state hint (hidden once cards exist) -->
+  <div id="empty" class="empty">
+    <div class="empty-mark">▦</div>
+    <p>The board is clear, sir.</p>
+    <small>Ask me to <em>show</em>, <em>draw</em> or <em>diagram</em> something — it lands here.</small>
+  </div>
+
+  <!-- top bar -->
+  <header id="bar">
+    <div class="brand">
+      <span class="logo">J.A.R.V.I.S.</span>
+      <span class="tagline">Board</span>
+    </div>
+    <div id="focus-pill" class="focus-pill" hidden>
+      <span class="fp-eye">◎</span><span id="focus-label">—</span>
+      <button id="focus-clear" class="fp-x" title="Deselect">×</button>
+    </div>
+    <div class="bar-right">
+      <a class="chip" href="/">‹ HUD</a>
+      <div id="conn" class="chip conn off"><span class="dot"></span><span id="conn-text">connecting</span></div>
+    </div>
+  </header>
+
+  <!-- bottom dock: view controls + actions -->
+  <div id="dock">
+    <button class="dbtn" id="zoom-out" title="Zoom out">−</button>
+    <button class="dbtn dlevel" id="zoom-level" title="Reset zoom to 100%">100%</button>
+    <button class="dbtn" id="zoom-in" title="Zoom in">+</button>
+    <span class="dsep"></span>
+    <button class="dbtn" id="fit" title="Frame everything">⤢&nbsp;fit</button>
+    <button class="dbtn" id="home" title="Reset the view">⌖&nbsp;home</button>
+    <span class="dsep"></span>
+    <button class="dbtn danger" id="clear" title="Remove every card">clear</button>
+  </div>
+
+  <div id="hint" class="hint">
+    drag header → move · corner → resize · click → focus · scroll → zoom · drag empty → pan
+  </div>
+
+  <script src="/static/canvas.js"></script>
+</body>
+</html>

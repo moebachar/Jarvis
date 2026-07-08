@@ -1,0 +1,205 @@
+/* J.A.R.V.I.S. HUD — "mission computer": flat, monospace, double-line framed panels.
+   No gradients, no glass/blur, no rounded corners, no glow. A fictional-console readout. */
+:root {
+  --bg:        #05080a;   /* near-black field */
+  --panel-bg:  #070d10;   /* flat panel fill (solid) */
+  --frame:     #1d5a66;   /* dim steel-cyan for the double-line frames */
+  --tick:      #e0a24a;   /* amber corner ticks / accents */
+  --cyan:      #38d4e6;   /* primary accent */
+  --cyan-dim:  #2a8b98;
+  --amber:     #e0a24a;   /* secondary accent */
+  --amber-hi:  #f2bd63;
+  --text:      #bcd2d6;   /* light steel */
+  --dim:       #557077;
+  --dim2:      #3a5157;
+  --red:       #e0604e;
+  --green:     #47c78a;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "JetBrains Mono", "Cascadia Mono", Consolas, "Courier New", monospace;
+  overflow: hidden;
+  font-size: 14px;
+}
+
+/* faint CRT scanlines over the whole console (flat, subtle — not a gradient wash) */
+body.mission::after {
+  content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 5;
+  background: repeating-linear-gradient(
+    to bottom, rgba(0,0,0,0) 0, rgba(0,0,0,0) 2px, rgba(0,0,0,0.16) 3px, rgba(0,0,0,0) 4px);
+  opacity: 0.5;
+}
+
+/* ── shell ─────────────────────────────────────────────────────── */
+#hud {
+  position: relative; z-index: 1;
+  height: 100vh; width: 100vw;
+  display: grid; grid-template-rows: auto 1fr;
+  gap: 14px; padding: 14px 16px 16px;
+}
+
+#topbar { display: flex; justify-content: space-between; align-items: flex-end; padding: 0 4px; }
+.brand { display: flex; flex-direction: column; gap: 2px; }
+.logo { font-size: 19px; letter-spacing: 5px; color: var(--cyan); }
+.cursor { color: var(--amber); animation: blink 1.1s step-end infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+.tagline { font-size: 10px; letter-spacing: 1.5px; color: var(--dim); }
+.topbar-right { display: flex; align-items: center; gap: 12px; }
+
+.navlink {
+  font-family: inherit; font-size: 11px; letter-spacing: 2px; color: var(--amber);
+  text-decoration: none; padding: 3px 8px; border: 1px solid var(--dim2); background: var(--panel-bg);
+}
+.navlink:hover { color: var(--amber-hi); border-color: var(--amber); }
+
+.conn {
+  display: flex; align-items: center; gap: 7px; font-size: 10.5px; letter-spacing: 2px;
+  text-transform: uppercase; padding: 3px 9px; border: 1px solid var(--dim2); background: var(--panel-bg);
+}
+.conn .dot { width: 7px; height: 7px; background: var(--red); }
+.conn.on .dot { background: var(--green); }
+.conn.on { color: var(--green); border-color: var(--green); }
+.conn.off { color: var(--red); }
+
+/* ── content grid: core (tall left) · feed (top right) · canvas + session (bottom right) ── */
+#content {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.32fr);
+  grid-template-rows: minmax(0, 1.55fr) minmax(0, 1fr);
+  grid-template-areas: "core feed" "core bottom";
+  gap: 14px;
+}
+#bulb-panel { grid-area: core; }
+#feed-panel { grid-area: feed; }
+#bottom {
+  grid-area: bottom; min-height: 0;
+  display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 14px;
+}
+
+/* ── framed panels ─────────────────────────────────────────────── */
+.panel {
+  position: relative; min-height: 0;
+  background: var(--panel-bg);
+  border: 3px double var(--frame);       /* the double-line console frame */
+  display: flex; flex-direction: column;
+  /* NOTE: no `overflow: hidden` here — the bracketed title sits *above* the top border
+     (top: -8px) and would be clipped. Inner areas (#feed, #preview, .stat-list, #scene)
+     clip themselves, so the panel itself must stay overflow-visible. */
+}
+/* amber corner ticks (top-left + bottom-right) */
+.panel::before, .panel::after {
+  content: ""; position: absolute; width: 11px; height: 11px; pointer-events: none; z-index: 3;
+  border-color: var(--tick); border-style: solid; border-width: 0;
+}
+.panel::before { top: 3px; left: 3px; border-top-width: 2px; border-left-width: 2px; }
+.panel::after  { bottom: 3px; right: 3px; border-bottom-width: 2px; border-right-width: 2px; }
+/* bracketed title sitting on the top frame */
+.panel-hd {
+  position: absolute; top: -8px; left: 16px; z-index: 4;
+  background: var(--bg); padding: 0 8px;
+  font-size: 10.5px; letter-spacing: 2px; color: var(--amber); white-space: nowrap;
+}
+
+/* ── core (3D) panel ───────────────────────────────────────────── */
+#bulb-panel { align-items: center; justify-content: center; }
+#scene { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+#bulb-overlay { position: absolute; left: 0; right: 0; bottom: 24px; text-align: center; pointer-events: none; }
+.state {
+  font-size: clamp(26px, 3.8vw, 46px); font-weight: 700; letter-spacing: 8px; color: var(--cyan);
+}
+.detail { margin-top: 9px; font-size: 11px; letter-spacing: 2px; color: var(--dim); text-transform: uppercase; min-height: 13px; }
+.state[data-state="listening"] { color: var(--cyan); }
+.state[data-state="thinking"]  { color: var(--amber); }
+.state[data-state="speaking"]  { color: var(--amber-hi); }
+.state[data-state="working"]   { color: var(--green); }
+.state[data-state="sleeping"]  { color: var(--dim); }
+.state[data-state="idle"]      { color: var(--cyan-dim); }
+
+/* remote/tunneled voice — the on-screen push-to-talk control (shown only in remote mode) */
+.ptt {
+  pointer-events: auto; margin-top: 16px; cursor: pointer;
+  font-family: inherit; font-size: 13px; letter-spacing: 4px; font-weight: 700;
+  color: var(--cyan); background: rgba(56, 212, 230, 0.06);
+  border: 2px solid var(--cyan-dim); border-radius: 0; padding: 12px 26px;
+  text-transform: uppercase; transition: color .12s, border-color .12s, background .12s;
+  -webkit-user-select: none; user-select: none; touch-action: none;
+}
+.ptt:hover { border-color: var(--cyan); color: var(--amber-hi); }
+.ptt.live {
+  color: var(--bg); background: var(--cyan); border-color: var(--cyan);
+  box-shadow: 0 0 22px rgba(56, 212, 230, 0.55);
+}
+.ptt:disabled { color: var(--red); border-color: var(--red); background: transparent; cursor: not-allowed; box-shadow: none; }
+.ptt-hint { margin-top: 8px; font-size: 10px; letter-spacing: 1.5px; color: var(--dim); text-transform: uppercase; }
+
+/* ── live CLI stream ───────────────────────────────────────────── */
+#feed {
+  flex: 1 1 auto; min-height: 0; overflow-y: auto;
+  padding: 14px 14px 10px; font-size: 12.5px; line-height: 1.5;
+  display: flex; flex-direction: column;
+}
+#feed::-webkit-scrollbar { width: 8px; }
+#feed::-webkit-scrollbar-thumb { background: var(--dim2); }
+#feed::-webkit-scrollbar-track { background: transparent; }
+.fl { white-space: pre-wrap; word-break: break-word; }
+.fl .ts { color: var(--dim2); margin-right: 8px; }
+.fl .gl { margin-right: 6px; }
+.fl.you    { color: var(--amber-hi); }
+.fl.you    .gl { color: var(--amber); }
+.fl.action { color: var(--cyan-dim); }
+.fl.action .gl { color: var(--dim); }
+.fl.action .tool { color: var(--cyan); }
+.fl.reply  { color: var(--text); }
+.fl.reply  .gl { color: var(--cyan); }
+.fl.note   { color: var(--amber); }
+.fl.err    { color: var(--red); }
+.fl.sys    { color: var(--dim); }
+
+/* ── canvas viewer (navigable) ─────────────────────────────────── */
+#canvas-view { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; padding: 14px 12px 10px; gap: 6px; }
+#preview-title { font-size: 11px; letter-spacing: 1px; color: var(--amber); text-transform: uppercase; min-height: 12px; }
+#preview { flex: 1 1 auto; min-height: 0; position: relative; overflow: hidden; }
+#canvas-nav { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding-top: 8px; border-top: 1px solid var(--dim2); }
+#cv-count { font-size: 11px; color: var(--dim); letter-spacing: 1px; min-width: 44px; text-align: center; }
+.cv-spacer { flex: 1 1 auto; }
+.cv-btn {
+  font-family: inherit; font-size: 13px; line-height: 1; color: var(--cyan);
+  background: transparent; border: 1px solid var(--dim2); padding: 3px 9px; cursor: pointer;
+}
+.cv-btn:hover { border-color: var(--cyan); color: var(--amber-hi); }
+.cv-btn:disabled { color: var(--dim2); border-color: transparent; cursor: default; }
+#cv-del { color: var(--red); }
+#cv-del:hover { border-color: var(--red); color: var(--red); }
+/* clickable links (feed + canvas markdown) — open in a new tab, never replace the HUD */
+a.link { color: var(--amber); text-decoration: underline; text-underline-offset: 2px; }
+a.link:hover { color: var(--amber-hi); }
+#preview svg, #preview img { max-width: 100%; max-height: 100%; display: block; margin: 0 auto; }
+#preview canvas { max-width: 100% !important; }
+.preview-empty { color: var(--dim); font-size: 11px; text-align: center; margin-top: 20%; padding: 0 16px; }
+.preview-md { font-size: 11.5px; color: var(--text); overflow: auto; height: 100%; }
+.preview-md h1 { font-size: 13px; color: var(--cyan); margin-bottom: 4px; }
+.preview-md h2 { font-size: 12px; color: var(--cyan); margin: 5px 0 3px; }
+.preview-md code { color: var(--amber); }
+.preview-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); gap: 8px; height: 100%; align-content: start; }
+.preview-stat { border: 1px solid var(--dim2); padding: 7px 9px; }
+.preview-stat .pv { font-size: 17px; color: var(--amber); font-weight: 700; }
+.preview-stat .pk { font-size: 9px; letter-spacing: 1px; color: var(--dim); text-transform: uppercase; }
+
+/* ── session readout ───────────────────────────────────────────── */
+.stat-list { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 14px 14px 10px; display: flex; flex-direction: column; gap: 8px; }
+.stat { display: flex; align-items: baseline; gap: 8px; font-size: 12.5px; }
+.stat .k { color: var(--dim); letter-spacing: 1px; }
+.stat .lead { flex: 1 1 auto; border-bottom: 1px dotted var(--dim2); align-self: center; }
+.stat b { color: var(--cyan); font-weight: 600; max-width: 55%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ── responsive: stack on narrow screens ───────────────────────── */
+@media (max-width: 900px) {
+  #content { grid-template-columns: 1fr; grid-template-rows: 1.1fr 1fr auto; grid-template-areas: "core" "feed" "bottom"; }
+  #bottom { grid-template-columns: 1fr; }
+}

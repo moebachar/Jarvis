@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# Virtualenv
+.venv/
+venv/
+
+# Jarvis runtime state & secrets
+.jarvis/state/
+.jarvis/.env
+.env
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Models / caches downloaded at runtime (Phase 1)
+*.onnx
+*.pt
+
+# Source media (large, third-party; consumed into ~/.jarvis/sounds — not distributed)
+*.mp4
+*.mov
+
+# Stray test artifact
+hello.txt
+
+# Stray generated document inside the package dir
+*.docx

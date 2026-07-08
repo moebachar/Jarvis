@@ -1,0 +1,40 @@
+# Jarvis per-project config. Edit values and rerun `jarvis --voice` (or `--check-voice`
+# to preview the voice). All available keys live in jarvis/config.py.
+
+[voice]
+# (0) TTS engine. "kokoro" = free, local, offline — no ElevenLabs key or credits. Same
+#     Kokoro-82M British male voice runs on CPU (~0.8x real-time on this laptop) or GPU.
+#     The model auto-downloads (~340 MB) to ~/.jarvis/cache/kokoro/ on first run. Switch
+#     back to "elevenlabs" any time you have credits again.
+tts_engine = "kokoro"
+kokoro_voice = "bm_george"   # British male; also bm_lewis, bm_daniel, bm_fable
+
+# (1) Speech pace — higher is faster (range 0.7–1.2).
+tts_speed = 1.18
+tts_stability = 0.6
+tts_style = 0.0
+
+# Speech-to-text model. Transcription is serial (he can't think until it finishes), so the
+# model size is the main latency knob. Measured on this CPU for a ~5s command:
+#   tiny.en ~1.2s · base.en ~2.4s · small.en ~7.0s  (all transcribed clean close-mic speech
+#   perfectly). "small.en" only earns its keep for far-field wake-word use across the room;
+#   with F9 push-to-talk (mic close) it's wasted latency. Drop to "tiny.en" for max speed.
+whisper_model = "base.en"
+
+# (4) "Listen louder": software gain multiplies the mic signal so a quiet/far mic is heard.
+#     Raise toward 3 if you still have to lean in; lower if loud speech distorts/clips.
+input_gain = 2.0
+
+# End-of-speech detection uses the neural Silero VAD (robust to background noise).
+#   silero_threshold: speech confidence 0–1. Raise (0.6) to ignore more noise; lower (0.35)
+#   to catch very soft speech.
+silero_threshold = 0.5
+#   How long a pause ends your turn. Raise (e.g. 1.0–1.2) if it cuts you off between phrases.
+silence_timeout = 0.7
+#   Sustained speech needed before a capture starts (rejects brief noises).
+vad_start_active_seconds = 0.2
+
+# (3) Wake word is plain "jarvis" (keyless offline Vosk). Say "jarvis" to wake him, or to
+#     interrupt him while he's speaking. If background chatter false-triggers it, the most
+#     robust option is the Porcupine engine (needs a free Picovoice key):
+#       wake_engine = "porcupine"   +   PICOVOICE_ACCESS_KEY=... in .env

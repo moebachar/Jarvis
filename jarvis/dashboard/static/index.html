@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>J.A.R.V.I.S.</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <script type="importmap">
+    { "imports": { "three": "/static/vendor/three.module.js" } }
+  </script>
+  <!-- vendored (no CDN) — used by the "latest canvas" preview panel -->
+  <script src="/static/vendor/mermaid.min.js"></script>
+  <script src="/static/vendor/chart.umd.min.js"></script>
+</head>
+<body class="mission">
+  <div id="hud">
+    <!-- ── top bar ───────────────────────────────────────────── -->
+    <header id="topbar">
+      <div class="brand">
+        <span class="logo">J.A.R.V.I.S<span class="cursor">_</span></span>
+        <span class="tagline">// just a rather very intelligent system</span>
+      </div>
+      <div class="topbar-right">
+        <div id="mic" class="conn off" hidden><span class="dot"></span><span id="mic-text">mic off</span></div>
+        <div id="conn" class="conn off"><span class="dot"></span><span id="conn-text">connecting</span></div>
+      </div>
+    </header>
+
+    <!-- ── content grid ──────────────────────────────────────── -->
+    <main id="content">
+      <!-- 3D core (tall left) -->
+      <section id="bulb-panel" class="panel">
+        <div class="panel-hd">[ CORE ]</div>
+        <canvas id="scene"></canvas>
+        <div id="bulb-overlay">
+          <div id="state" class="state" data-state="idle">&lsaquo; IDLE &rsaquo;</div>
+          <div id="detail" class="detail">standing by</div>
+          <!-- Remote/tunneled voice: hidden unless this tab is the mic + speaker. -->
+          <button id="ptt" class="ptt" hidden>HOLD TO TALK</button>
+          <div id="ptt-hint" class="ptt-hint" hidden>hold to talk · or the space bar · press again to interrupt</div>
+        </div>
+      </section>
+
+      <!-- live Claude Code stream -->
+      <section id="feed-panel" class="panel">
+        <div class="panel-hd">[ LIVE // CLAUDE CODE ]</div>
+        <div id="feed"></div>
+      </section>
+
+      <!-- bottom-right strip: latest canvas + session -->
+      <div id="bottom">
+        <section id="canvas-panel" class="panel">
+          <div class="panel-hd">[ CANVAS ]</div>
+          <div id="canvas-view">
+            <div id="preview-title"></div>
+            <div id="preview"><div class="preview-empty">no render yet — ask jarvis to "show" something</div></div>
+            <div id="canvas-nav">
+              <button id="cv-prev" class="cv-btn" title="Previous card">‹</button>
+              <span id="cv-count">0 / 0</span>
+              <button id="cv-next" class="cv-btn" title="Next card">›</button>
+              <span class="cv-spacer"></span>
+              <button id="cv-del" class="cv-btn" title="Remove this card">×</button>
+            </div>
+          </div>
+        </section>
+
+        <section id="stats-panel" class="panel">
+          <div class="panel-hd">[ SESSION ]</div>
+          <div class="stat-list">
+            <div class="stat"><span class="k">model</span><span class="lead"></span><b id="m-model">—</b></div>
+            <div class="stat"><span class="k">tools</span><span class="lead"></span><b id="m-tools">0</b></div>
+            <div class="stat"><span class="k">tokens in</span><span class="lead"></span><b id="m-tin">—</b></div>
+            <div class="stat"><span class="k">tokens out</span><span class="lead"></span><b id="m-tout">—</b></div>
+            <div class="stat"><span class="k">session</span><span class="lead"></span><b id="m-session">—</b></div>
+            <div class="stat"><span class="k">uptime</span><span class="lead"></span><b id="m-uptime">0:00</b></div>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <script type="module" src="/static/app.js"></script>
+</body>
+</html>

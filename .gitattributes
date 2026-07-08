@@ -1,0 +1,7 @@
+# Normalize line endings so the repo is consistent across the laptop and the GPU desktop.
+* text=auto
+
+# Shell script MUST stay LF or it won't run if the desktop is Linux.
+*.sh text eol=lf
+# PowerShell is happiest with CRLF on Windows.
+*.ps1 text eol=crlf

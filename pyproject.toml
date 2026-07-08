@@ -1,0 +1,62 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "jarvis"
+version = "0.1.0"
+description = "A voice-driven, autonomous Claude Code companion you can pull into any project."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "claude-agent-sdk>=0.2.0",
+]
+
+[project.optional-dependencies]
+# Added in later phases (voice / dashboard / presence). Kept separate so Phase 0 stays lean.
+voice = [
+    "sounddevice",      # mic capture + speaker playback (one 16kHz stream)
+    "vosk",             # keyless single-word wake "jarvis" (default engine)
+    "openwakeword",     # alternative keyless wake ("hey jarvis")
+    "faster-whisper",   # local speech-to-text
+    "elevenlabs",       # premium British TTS voice
+    "numpy",            # audio buffers / energy VAD
+    "pynput",           # push-to-talk: hold a key to listen (no wake word)
+]
+# Local, free, offline TTS — the Kokoro-82M voice via ONNX Runtime + a bundled espeak
+# phonemizer (no torch, no spaCy, no C compiler). Set [voice] tts_engine = "kokoro".
+# For GPU (e.g. a Quadro/RTX box) additionally install onnxruntime-gpu.
+kokoro = ["kokoro-onnx", "onnxruntime", "soundfile"]
+# Local zero-shot VOICE CLONE — XTTS-v2 via coqui-tts (brings torch). Set [voice]
+# tts_engine = "xtts" and point xtts_reference at a clean ~15 s clip of the target voice.
+# HEAVY + torch-bound: best in its OWN environment (Python 3.11 recommended), and for real-time
+# install a CUDA torch build. See config.voice-clone.example.toml.
+clone = ["coqui-tts"]
+# Optional alternative wake engine (single word "jarvis") via Picovoice; needs a free key.
+porcupine = ["pvporcupine"]
+dashboard = [
+    "fastapi",
+    "uvicorn[standard]",
+]
+presence = [
+    "python-telegram-bot>=20",   # async Telegram bridge (heartbeat is a plain asyncio task)
+]
+# Live web browsing fallback: when WebFetch/WebSearch can't load a page, Jarvis drives a real
+# (visible) Chrome via Playwright. Uses the system Chrome (channel="chrome") if present, so no
+# `playwright install` is needed; otherwise `playwright install chromium`.
+web = [
+    "playwright",
+]
+# One-shot "everything a normal Jarvis needs" — voice + local free TTS + dashboard + Telegram +
+# web browsing. This is the default install target (the installer uses jarvis[all]). It does NOT
+# include `clone` (XTTS/torch, GPU-specific) — add that separately with the installer's -Clone.
+all = ["jarvis[voice,kokoro,dashboard,presence,web]"]
+
+[project.scripts]
+jarvis = "jarvis.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["jarvis*"]
+
+[tool.setuptools.package-data]
+"jarvis.dashboard" = ["static/*", "static/vendor/*"]
