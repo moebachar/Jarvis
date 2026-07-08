@@ -198,6 +198,24 @@ class DashboardConfig:
 
 
 @dataclasses.dataclass
+class MachineConfig:
+    """Per-MACHINE profile — declared ONCE per box in ``~/.jarvis/machine.toml`` (written by the
+    installer or ``jarvis --machine-init``). BOTH the installer and the runtime read it, so you
+    never pass GPU flags or hand-edit device fields per machine:
+
+    - installer: ``gpu`` → also install onnxruntime-gpu; ``voice_clone`` → install the XTTS clone.
+    - runtime:   ``gpu`` → default the voice STT/TTS devices to CUDA (see ``_apply_machine_gpu``).
+
+    An explicit ``[voice]`` setting always wins over these derived defaults.
+    """
+    gpu: bool = False          # this box has an NVIDIA GPU
+    voice_clone: bool = False  # the XTTS-v2 voice clone is installed/enabled here
+    cuda: str = "cu121"        # torch CUDA wheel tag for the clone build (cu118 | cu121 | cu124)
+    python: str = ""           # explicit python for the venv ("" = auto; 3.11 suits the clone)
+    extras: str = "all"        # pip extras bundle the installer installs
+
+
+@dataclasses.dataclass
 class JarvisConfig:
     user_title: str = "sir"
     heartbeat_minutes: int = 15
@@ -206,6 +224,7 @@ class JarvisConfig:
     voice: VoiceConfig = dataclasses.field(default_factory=VoiceConfig)
     telegram: TelegramConfig = dataclasses.field(default_factory=TelegramConfig)
     dashboard: DashboardConfig = dataclasses.field(default_factory=DashboardConfig)
+    machine: MachineConfig = dataclasses.field(default_factory=MachineConfig)
 
 
 # --------------------------------------------------------------------------- #
@@ -213,6 +232,11 @@ class JarvisConfig:
 # --------------------------------------------------------------------------- #
 def global_dir() -> Path:
     return Path.home() / ".jarvis"
+
+
+def machine_toml_path() -> Path:
+    """The per-machine profile file (installer-owned): ``~/.jarvis/machine.toml``."""
+    return global_dir() / "machine.toml"
 
 
 def project_jarvis_dir(project_dir: Path) -> Path:
@@ -315,6 +339,31 @@ def _apply_env_overrides(merged: dict) -> None:
             merged.setdefault(section, {})[field] = val
 
 
+# When [machine] gpu = true, these voice fields default to their CUDA values — UNLESS the user
+# set them explicitly in a [voice] table (then their choice wins). int8_float16 is the safe GPU
+# compute type (fast on Pascal like the P4000, fine on newer cards).
+_GPU_VOICE_DEFAULTS = {
+    "whisper_device": "cuda",
+    "whisper_compute_type": "int8_float16",
+    "kokoro_device": "cuda",
+    "xtts_device": "cuda",
+}
+
+
+def _apply_machine_gpu(merged: dict, explicit_voice: set[str]) -> None:
+    """If the machine profile says this box has a GPU, steer the voice models onto CUDA.
+
+    `explicit_voice` is the set of [voice] keys the user set by hand (from the raw TOML files);
+    those are left untouched, so `[machine] gpu = true` fills only the gaps.
+    """
+    if not (merged.get("machine") or {}).get("gpu"):
+        return
+    voice = merged.setdefault("voice", {})
+    for field, val in _GPU_VOICE_DEFAULTS.items():
+        if field not in explicit_voice:
+            voice[field] = val
+
+
 def load_config(project_dir: str | Path) -> JarvisConfig:
     project_dir = Path(project_dir)
 
@@ -325,12 +374,26 @@ def load_config(project_dir: str | Path) -> JarvisConfig:
     _load_dotenv(project_dir / ".env")
     _load_dotenv(global_dir() / ".env")
 
-    # 2. Merge defaults < global toml < project toml.
-    merged = dataclasses.asdict(JarvisConfig())
-    merged = _deep_merge(merged, _read_toml(global_dir() / "config.toml"))
-    merged = _deep_merge(merged, _read_toml(project_jarvis_dir(project_dir) / "config.toml"))
+    # 2. Merge defaults < machine profile < global toml < project toml.
+    #    machine.toml is installer-owned (hardware facts); the user's config.toml wins over it.
+    raw_machine = _read_toml(machine_toml_path())
+    raw_global = _read_toml(global_dir() / "config.toml")
+    raw_project = _read_toml(project_jarvis_dir(project_dir) / "config.toml")
 
-    # 3. Secrets from environment win.
+    # Track which [voice] fields the user set BY HAND, so the GPU auto-defaults never clobber them.
+    explicit_voice: set[str] = set()
+    for raw in (raw_machine, raw_global, raw_project):
+        section = raw.get("voice")
+        if isinstance(section, dict):
+            explicit_voice |= set(section.keys())
+
+    merged = dataclasses.asdict(JarvisConfig())
+    merged = _deep_merge(merged, raw_machine)
+    merged = _deep_merge(merged, raw_global)
+    merged = _deep_merge(merged, raw_project)
+
+    # 3. Machine profile → GPU device defaults, then secrets from the environment win.
+    _apply_machine_gpu(merged, explicit_voice)
     _apply_env_overrides(merged)
 
     return _from_dict(JarvisConfig, merged)

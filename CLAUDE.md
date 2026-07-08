@@ -50,6 +50,18 @@ onnxruntime-gpu`), `-Clone`/`--clone` (`pipx inject jarvis coqui-tts` + `pipx ru
 the `claude` CLI is present (subscription auth) + warn if `ANTHROPIC_API_KEY` is set. `jarvis --init`
 (`scaffold.py init_project`) writes a starter `<project>/.jarvis/{config.toml,.env.example,.gitignore}`
 (keyless Kokoro default; never overwrites existing). `jarvis --version` via importlib.metadata.
+**Per-machine profile (`jarvis/machine.py` + `~/.jarvis/machine.toml`):** the user wanted GPU declared
+ONCE per machine in a config file, not via install flags. So there's a `[machine]` profile (`MachineConfig`
+in config.py: `gpu`/`voice_clone`/`cuda`/`python`/`extras`) in an installer-owned `~/.jarvis/machine.toml`
+that BOTH sides read. Runtime: `_apply_machine_gpu()` (config.py) — when `machine.gpu` is true, it fills the
+voice STT/TTS device fields (`whisper_device`/`whisper_compute_type`=int8_float16/`kokoro_device`/
+`xtts_device`) with their CUDA values, but ONLY for fields the user didn't set by hand (tracked via
+`explicit_voice` from the raw TOMLs); machine.toml is merged BELOW the user's config.toml. Installer:
+`python -m jarvis.machine` prints the RESOLVED profile as `KEY=VALUE` lines (`resolve_profile`: forced
+`JARVIS_FORCE_*` env > existing machine.toml > `detect_gpu()` via nvidia-smi), which install.ps1/.sh parse
+to pick extras + GPU/clone injections, then persist via `jarvis --machine-init` (writes machine.toml;
+`--gpu`/`--no-gpu` force, `--clone` marks it). Net: a bare `.\install.ps1` auto-detects the GPU, installs
+the right build, records the profile, and the runtime uses CUDA — no per-machine flags.
 **Dashboard-from-another-machine:** the HUD frontend already dials `ws://${location.host}/ws`, so an SSH
 port-forward "just works" with ZERO code change; `_dashboard_forward_note()` prints the exact
 `ssh -L <port>:localhost:<port> <host>` hint on startup whenever the dashboard is on (loopback stays the

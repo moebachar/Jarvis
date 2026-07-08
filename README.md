@@ -71,20 +71,29 @@ its root:
 
 ```powershell
 # Windows
-.\install.ps1                 # full: voice + free Kokoro TTS + dashboard + Telegram + web
-.\install.ps1 -Gpu            # + run Kokoro/whisper on an NVIDIA GPU (onnxruntime-gpu)
-.\install.ps1 -Clone          # + the XTTS-v2 voice clone (coqui-tts + a CUDA torch build)
+.\install.ps1                 # detects this machine's GPU automatically; installs the right build
+.\install.ps1 -Gpu            # force GPU support on   (-NoGpu forces it off)
+.\install.ps1 -Clone          # also install the XTTS-v2 voice clone (coqui-tts + a CUDA torch build)
 ```
 
 ```bash
 # Linux / macOS
-./install.sh                  # same bundle
-./install.sh --gpu            # GPU acceleration
+./install.sh                  # same — auto-detects the GPU
+./install.sh --gpu            # force GPU on   (--no-gpu forces off)
 ./install.sh --clone          # voice clone
 ```
 
-It also installs `pipx` if you don't have it, checks that the `claude` CLI is present, and prints
-the run steps. Re-run it any time to upgrade; remove with `pipx uninstall jarvis`.
+**One profile per machine.** The installer records this box in `~/.jarvis/machine.toml` (auto-detecting
+the GPU via `nvidia-smi`), and **both** the installer and the runtime read it — so you set GPU *once*
+and never pass flags or hand-edit device fields again. On the GPU desktop it installs `onnxruntime-gpu`
+and the runtime uses CUDA for STT + TTS; on the laptop it stays CPU. Refresh it anytime with:
+
+```powershell
+jarvis --machine-init            # re-detect (or --gpu / --no-gpu to force, --clone to mark the clone)
+```
+
+The installer also bootstraps `pipx` if missing, checks the `claude` CLI is present, and prints the run
+steps. Re-run it any time to upgrade; remove with `pipx uninstall jarvis`.
 
 > Prefer a plain editable dev install instead? `python -m venv .venv && .\.venv\Scripts\python.exe
 > -m pip install -e .[all]` still works.

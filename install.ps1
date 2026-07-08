@@ -3,22 +3,28 @@
   and exposes a global `jarvis` command. No hand-built venv; run once, then `cd` into any project
   and type `jarvis`.
 
-  Usage (from the repo root, after `git clone` / pull):
-      .\install.ps1                       # full install: voice + free Kokoro TTS + dashboard + Telegram + web
-      .\install.ps1 -Gpu                  # + onnxruntime-gpu (run Kokoro/whisper on an NVIDIA GPU)
-      .\install.ps1 -Clone                # + XTTS-v2 voice clone (coqui-tts + a CUDA torch build)
-      .\install.ps1 -Extras "voice,dashboard"   # pick your own extras instead of the default bundle
-      .\install.ps1 -Python "C:\Python311\python.exe"   # use a specific Python (3.11 recommended for -Clone)
+  It reads this machine's profile (~/.jarvis/machine.toml) — or auto-detects your GPU with
+  nvidia-smi the first time — so you DON'T pass flags per machine. Just:
 
-  Re-run any time to upgrade (it force-reinstalls). Uninstall with:  pipx uninstall jarvis
+      .\install.ps1                 # detects GPU/clone from the machine profile (or auto-detects)
+
+  Override the profile for this run (also saved back to the profile):
+      .\install.ps1 -Gpu            # force GPU support on   (onnxruntime-gpu; runtime uses CUDA)
+      .\install.ps1 -NoGpu          # force GPU support off  (CPU only)
+      .\install.ps1 -Clone          # also install the XTTS-v2 voice clone (coqui-tts + CUDA torch)
+      .\install.ps1 -Extras "voice,dashboard"           # custom pip extras instead of the bundle
+      .\install.ps1 -Python "C:\Python311\python.exe"   # specific Python (3.11 suits -Clone)
+
+  Re-run any time to upgrade. Uninstall with:  pipx uninstall jarvis
 #>
 [CmdletBinding()]
 param(
-    [string]$Extras = "all",     # pip extras to install ("all" = voice,kokoro,dashboard,presence,web)
-    [switch]$Gpu,                # inject onnxruntime-gpu so Kokoro/whisper can use CUDA
-    [switch]$Clone,              # inject coqui-tts + a CUDA torch build (XTTS-v2 voice clone)
-    [string]$Python = "",        # explicit python.exe for the venv (3.11 recommended with -Clone)
-    [string]$Cuda = "cu121"      # torch CUDA wheel tag for -Clone (match your driver: cu118/cu121/cu124)
+    [switch]$Gpu,                # force GPU support ON  (overrides the machine profile + autodetect)
+    [switch]$NoGpu,              # force GPU support OFF
+    [switch]$Clone,             # also install the XTTS-v2 voice clone (coqui-tts + a CUDA torch build)
+    [string]$Extras = "",        # pip extras ("" = from profile, default "all")
+    [string]$Python = "",        # explicit python.exe for the venv (3.11 suits -Clone)
+    [string]$Cuda = ""           # torch CUDA wheel tag for -Clone ("" = from profile, default cu121)
 )
 
 $ErrorActionPreference = "Stop"
@@ -36,72 +42,90 @@ function Resolve-Python {
     }
     $cand = (Get-Command python -ErrorAction SilentlyContinue)
     if ($cand) { return $cand.Source }
-    $pyLauncher = (Get-Command py -ErrorAction SilentlyContinue)
-    if ($pyLauncher) { return "py" }   # the Windows launcher; we'll call `py -3`
+    if (Get-Command py -ErrorAction SilentlyContinue) { return "py" }
     throw "No Python found. Install Python 3.10+ from https://python.org and re-run."
 }
 $Py = Resolve-Python
 if ($Py -eq "py") { $PyArgs = @("-3") } else { $PyArgs = @() }
-$PyVer = (& $Py @PyArgs --version) 2>&1
-Info "Using Python: $Py  ($PyVer)"
+Info "Using Python: $Py  ($(& $Py @PyArgs --version 2>&1))"
 
-# 2. Ensure pipx (the isolated-app installer) ----------------------------------------------
+# 2. Resolve THIS machine's profile (forced flags > machine.toml > auto-detect) ------------
+# The precedence logic lives in Python (jarvis.machine), so we just pass forced flags via env.
+if ($Gpu -and $NoGpu) { throw "Pass only one of -Gpu / -NoGpu." }
+if ($Gpu)   { $env:JARVIS_FORCE_GPU = "1" }
+if ($NoGpu) { $env:JARVIS_FORCE_GPU = "0" }
+if ($Clone) { $env:JARVIS_FORCE_CLONE = "1" }
+if ($Extras) { $env:JARVIS_FORCE_EXTRAS = $Extras }
+if ($Python) { $env:JARVIS_FORCE_PYTHON = $Python }
+if ($Cuda)   { $env:JARVIS_FORCE_CUDA = $Cuda }
+
+Info "Resolving machine profile…"
+Push-Location $RepoPath
+try { $resolvedLines = & $Py @PyArgs -m jarvis.machine } finally { Pop-Location }
+$P = @{}
+foreach ($line in $resolvedLines) { if ($line -match '^(\w+)=(.*)$') { $P[$matches[1]] = $matches[2] } }
+$useGpu   = ($P["GPU"]   -eq "1")
+$useClone = ($P["CLONE"] -eq "1")
+$useCuda  = $P["CUDA"]
+$useExtras= $P["EXTRAS"]
+$usePython= $P["PYTHON"]
+Ok "Profile: GPU=$useGpu  clone=$useClone  extras=$useExtras  cuda=$useCuda"
+
+# 3. Ensure pipx (the isolated-app installer) ----------------------------------------------
 $havePipx = $true
 try { & $Py @PyArgs -m pipx --version | Out-Null } catch { $havePipx = $false }
 if (-not $havePipx) {
     Info "Installing pipx (one-time)…"
     & $Py @PyArgs -m pip install --user --upgrade pipx
     & $Py @PyArgs -m pipx ensurepath | Out-Null
-    Ok "pipx installed (a new terminal will have `pipx` on PATH; this run doesn't need it)."
-} else {
-    Ok "pipx already present."
-}
+    Ok "pipx installed (a new terminal will have it on PATH; this run calls it via python -m)."
+} else { Ok "pipx already present." }
 
-# 3. Install Jarvis from THIS repo into its own environment ---------------------------------
-$spec = "$RepoPath[$Extras]"
-Info "Installing jarvis[$Extras] from $RepoPath …"
-$installArgs = @("-m", "pipx", "install", "--force", $spec)
-if ($Python) { $installArgs += @("--python", $Python) }
+# 4. Install Jarvis from THIS repo into its own environment --------------------------------
+Info "Installing jarvis[$useExtras] from $RepoPath …"
+$installArgs = @("-m", "pipx", "install", "--force", "$RepoPath[$useExtras]")
+if ($usePython) { $installArgs += @("--python", $usePython) }
 & $Py @PyArgs @installArgs
 Ok "jarvis installed."
 
-# 4. Optional: GPU acceleration for Kokoro / faster-whisper --------------------------------
-if ($Gpu) {
+# 5. GPU acceleration (Kokoro / faster-whisper) -------------------------------------------
+if ($useGpu) {
     Info "Injecting onnxruntime-gpu (Kokoro on CUDA)…"
     & $Py @PyArgs -m pipx inject jarvis onnxruntime-gpu
     Warn "faster-whisper on GPU also needs CUDA + cuDNN on PATH (nvidia-cublas-cu12 / nvidia-cudnn-cu12)."
-    Ok "GPU runtime injected. Set whisper_device/kokoro_device = \"cuda\" in .jarvis/config.toml."
 }
 
-# 5. Optional: XTTS-v2 voice clone (heavy; torch) ------------------------------------------
-if ($Clone) {
-    Info "Injecting the voice-clone engine (coqui-tts) + a CUDA torch build ($Cuda)…"
-    if (-not $Python) { Warn "coqui-tts is happiest on Python 3.11 — if this fails, re-run with -Python <py3.11>." }
+# 6. XTTS-v2 voice clone (heavy; torch) ---------------------------------------------------
+if ($useClone) {
+    Info "Injecting the voice-clone engine (coqui-tts) + a CUDA torch build ($useCuda)…"
+    if (-not $usePython) { Warn "coqui-tts prefers Python 3.11 — if this fails, re-run with -Python <py3.11>." }
     & $Py @PyArgs -m pipx inject jarvis coqui-tts
-    & $Py @PyArgs -m pipx runpip jarvis install torch torchaudio --index-url "https://download.pytorch.org/whl/$Cuda"
-    Ok "Voice clone ready. Set tts_engine=\"xtts\" + xtts_reference in .jarvis/config.toml (see config.voice-clone.example.toml)."
+    & $Py @PyArgs -m pipx runpip jarvis install torch torchaudio --index-url "https://download.pytorch.org/whl/$useCuda"
 }
 
-# 6. Check the Claude CLI (the brain runs on your subscription through it) ------------------
-$claude = Get-Command claude -ErrorAction SilentlyContinue
-if ($claude) {
-    Ok "Claude CLI found at $($claude.Source) — the brain uses your subscription via it."
+# 7. Persist the resolved profile so runtime + future installs agree ----------------------
+$miArgs = @("--machine-init")
+if ($useGpu) { $miArgs += "--gpu" } else { $miArgs += "--no-gpu" }
+if ($useClone) { $miArgs += "--clone" }
+& jarvis @miArgs 2>$null
+if ($LASTEXITCODE -ne 0) { Warn "Couldn't write the machine profile via `jarvis` (PATH?). Run: jarvis $($miArgs -join ' ')" }
+else { Ok "Machine profile saved to ~/.jarvis/machine.toml (runtime will use $(if($useGpu){'CUDA'}else{'CPU'}))." }
+
+# 8. Check the Claude CLI (the brain runs on your subscription through it) -----------------
+if (Get-Command claude -ErrorAction SilentlyContinue) {
+    Ok "Claude CLI found — the brain uses your subscription via it."
 } else {
     Warn "Claude CLI not found. The brain needs it (subscription auth). Install + log in:"
-    Warn "    npm install -g @anthropic-ai/claude-code"
-    Warn "    claude    (sign in once)   — or:   claude setup-token"
+    Warn "    npm install -g @anthropic-ai/claude-code   ;   claude   (sign in once)"
 }
-if ($env:ANTHROPIC_API_KEY) {
-    Warn "ANTHROPIC_API_KEY is set in your environment. Jarvis unsets it per-run so the brain uses"
-    Warn "your subscription, but consider removing it to avoid surprises."
-}
+if ($env:ANTHROPIC_API_KEY) { Warn "ANTHROPIC_API_KEY is set; Jarvis unsets it per-run, but consider removing it." }
 
-# 7. Done ----------------------------------------------------------------------------------
+# 9. Done ----------------------------------------------------------------------------------
 Write-Host ""
 Ok "Installed. Next:"
 Write-Host "    cd <any project>"
 Write-Host "    jarvis --init      # optional: scaffold .jarvis/ (config + .env.example)"
 Write-Host "    jarvis             # text REPL   |   jarvis --voice   |   jarvis --remote"
 Write-Host ""
-Write-Host "  Dashboard from another machine (Jarvis stays here, browser is elsewhere):"
+Write-Host "  Dashboard from another machine (Jarvis stays here, browser elsewhere):"
 Write-Host "    ssh -L 8765:localhost:8765 <this-host>   then open http://localhost:8765/"

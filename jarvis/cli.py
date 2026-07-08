@@ -659,6 +659,32 @@ def main() -> None:
         help="Scaffold a starter .jarvis/ (config.toml + .env.example) in this project, then exit.",
     )
     parser.add_argument(
+        "--machine-init",
+        action="store_true",
+        help="Record this machine's profile in ~/.jarvis/machine.toml (auto-detects the GPU). "
+             "Combine with --gpu/--no-gpu to force it, and --clone to mark the voice clone.",
+    )
+    parser.add_argument(
+        "--gpu",
+        dest="gpu",
+        action="store_const",
+        const=True,
+        default=None,
+        help="With --machine-init: force GPU on (skip auto-detect).",
+    )
+    parser.add_argument(
+        "--no-gpu",
+        dest="gpu",
+        action="store_const",
+        const=False,
+        help="With --machine-init: force GPU off.",
+    )
+    parser.add_argument(
+        "--clone",
+        action="store_true",
+        help="With --machine-init: mark that the XTTS-v2 voice clone is installed here.",
+    )
+    parser.add_argument(
         "--version",
         action="store_true",
         help="Print the installed Jarvis version and exit.",
@@ -671,6 +697,19 @@ def main() -> None:
             print(f"jarvis {version('jarvis')}")
         except Exception:
             print("jarvis (version unknown — not installed as a package)")
+        return
+
+    if args.machine_init:
+        from .machine import resolve_gpu, write_machine_profile
+        gpu = resolve_gpu(args.gpu)
+        path = write_machine_profile(gpu=gpu, voice_clone=args.clone)
+        how = "forced" if args.gpu is not None else "auto-detected"
+        print(f"{GOLD}Machine profile written{RESET} → {path}")
+        print(f"   GPU: {GOLD}{gpu}{RESET} ({how})"
+              + (f"   ·   voice clone: {GOLD}on{RESET}" if args.clone else ""))
+        if gpu:
+            print(f"{DIM}   Runtime will use CUDA for STT + TTS on this machine "
+                  f"(override per-field in [voice] if you ever need to).{RESET}")
         return
 
     project_dir = Path(args.project or os.getcwd()).resolve()
