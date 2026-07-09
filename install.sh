@@ -77,9 +77,9 @@ ok "jarvis installed. (Machine profile saved to ~/.jarvis/machine.toml.)"
 
 # 5. GPU runtime --------------------------------------------------------------------------
 if [ "$USE_GPU" = "1" ]; then
-  info "Injecting onnxruntime-gpu (Kokoro on CUDA)…"
-  "$PY" -m pipx inject jarvis onnxruntime-gpu
-  warn "faster-whisper on GPU also needs CUDA + cuDNN on PATH (nvidia-cublas-cu12 / nvidia-cudnn-cu12)."
+  info "Injecting GPU runtimes (onnxruntime-gpu for Kokoro; cuBLAS + cuDNN for faster-whisper)…"
+  "$PY" -m pipx inject jarvis onnxruntime-gpu nvidia-cublas-cu12 nvidia-cudnn-cu12
+  ok "GPU runtimes injected. (If STT still can't find CUDA, Jarvis auto-falls back to CPU.)"
 fi
 
 # 6. Voice clone --------------------------------------------------------------------------

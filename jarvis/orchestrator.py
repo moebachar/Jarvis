@@ -143,17 +143,32 @@ class Orchestrator:
             return self.transcriber
         async with self._transcriber_lock:
             if self.transcriber is None:
-                from .voice.stt import Transcriber
-
-                v = self.config.voice
-                self.transcriber = await asyncio.to_thread(
-                    Transcriber,
-                    v.whisper_model,
-                    v.whisper_device,
-                    v.whisper_compute_type,
-                    v.whisper_beam_size,
-                )
+                self.transcriber = await asyncio.to_thread(self._build_transcriber)
         return self.transcriber
+
+    def _build_transcriber(self):
+        """Build the faster-whisper model, falling back to CPU if the GPU build can't load.
+
+        On a GPU box the machine profile asks for device='cuda', but faster-whisper (CTranslate2)
+        RAISES rather than degrading when cuBLAS/cuDNN aren't found — which would crash the whole
+        voice session. Catch that and retry on the CPU so speech-to-text always works; the CPU
+        model is fast enough for close-mic push-to-talk anyway.
+        """
+        from .voice.stt import Transcriber
+
+        v = self.config.voice
+        try:
+            return Transcriber(
+                v.whisper_model, v.whisper_device, v.whisper_compute_type, v.whisper_beam_size
+            )
+        except Exception as exc:
+            if v.whisper_device == "cpu":
+                raise  # already on CPU — nothing to fall back to
+            note = (f"STT couldn't load on '{v.whisper_device}' "
+                    f"({type(exc).__name__}: {str(exc)[:100]}); falling back to CPU. For GPU STT, "
+                    f"add the CUDA libs (nvidia-cublas-cu12 / nvidia-cudnn-cu12).")
+            print(f"   [device] ! {note}", flush=True)
+            return Transcriber(v.whisper_model, "cpu", "int8", v.whisper_beam_size)
 
     async def _on_telegram_audio(self, data: bytes) -> str:
         """Transcribe an inbound Telegram voice note, then answer it like a text message.
