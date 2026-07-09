@@ -69,10 +69,11 @@ def test_dashboard_forward_note_lan_warns_and_disabled_is_none():
 def test_apply_machine_gpu_fills_unset_voice_devices():
     merged = {"machine": {"gpu": True}, "voice": {"whisper_device": "cpu", "kokoro_device": "auto"}}
     _apply_machine_gpu(merged, explicit_voice=set())  # nothing set by hand
-    assert merged["voice"]["whisper_device"] == "cuda"
-    assert merged["voice"]["whisper_compute_type"] == "int8_float16"
+    # Kokoro + XTTS go to CUDA (they degrade gracefully); Whisper is left on CPU by design.
     assert merged["voice"]["kokoro_device"] == "cuda"
     assert merged["voice"]["xtts_device"] == "cuda"
+    assert merged["voice"]["whisper_device"] == "cpu"
+    assert "whisper_compute_type" not in merged["voice"]
 
 
 def test_apply_machine_gpu_respects_explicit_and_no_gpu():

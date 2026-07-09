@@ -116,11 +116,17 @@ if ($usePython) { $installArgs += @("--python", $usePython) }
 Invoke-Pipx @installArgs
 Ok "jarvis installed. (Machine profile saved to ~/.jarvis/machine.toml.)"
 
-# 5. GPU acceleration (Kokoro on CUDA + faster-whisper CUDA libs) -------------------------
+# 5. GPU acceleration for Kokoro (best-effort; CPU still works if this fails) --------------
 if ($useGpu) {
-    Info "Injecting GPU runtimes (onnxruntime-gpu for Kokoro; cuBLAS + cuDNN for faster-whisper)..."
-    Invoke-Pipx inject jarvis onnxruntime-gpu nvidia-cublas-cu12 nvidia-cudnn-cu12
-    Ok "GPU runtimes injected. (If STT still can't find CUDA, Jarvis auto-falls back to CPU.)"
+    Info "Injecting onnxruntime-gpu so Kokoro TTS can use the GPU..."
+    try {
+        Invoke-Pipx inject jarvis onnxruntime-gpu
+        Ok "onnxruntime-gpu injected (Kokoro on GPU)."
+    } catch {
+        Warn "Couldn't install onnxruntime-gpu; Kokoro will run on CPU (still faster than real time). Continuing."
+    }
+    Write-Host "    (For GPU speech-to-text too, later run: pipx inject jarvis nvidia-cublas-cu12 nvidia-cudnn-cu12"
+    Write-Host "     and set whisper_device = \"cuda\" in .jarvis/config.toml.)"
 }
 
 # 6. XTTS-v2 voice clone (heavy; torch) ---------------------------------------------------

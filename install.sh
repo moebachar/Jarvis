@@ -80,9 +80,14 @@ ok "jarvis installed. (Machine profile saved to ~/.jarvis/machine.toml.)"
 
 # 5. GPU runtime --------------------------------------------------------------------------
 if [ "$USE_GPU" = "1" ]; then
-  info "Injecting GPU runtimes (onnxruntime-gpu for Kokoro; cuBLAS + cuDNN for faster-whisper)…"
-  "$PY" -m pipx inject jarvis onnxruntime-gpu nvidia-cublas-cu12 nvidia-cudnn-cu12
-  ok "GPU runtimes injected. (If STT still can't find CUDA, Jarvis auto-falls back to CPU.)"
+  info "Injecting onnxruntime-gpu so Kokoro TTS can use the GPU…"
+  if "$PY" -m pipx inject jarvis onnxruntime-gpu; then
+    ok "onnxruntime-gpu injected (Kokoro on GPU)."
+  else
+    warn "Couldn't install onnxruntime-gpu; Kokoro will run on CPU (still faster than real time). Continuing."
+  fi
+  echo "    (For GPU speech-to-text too, later run: pipx inject jarvis nvidia-cublas-cu12 nvidia-cudnn-cu12"
+  echo "     and set whisper_device = \"cuda\" in .jarvis/config.toml.)"
 fi
 
 # 6. Voice clone --------------------------------------------------------------------------

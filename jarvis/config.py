@@ -341,11 +341,11 @@ def _apply_env_overrides(merged: dict) -> None:
 
 
 # When [machine] gpu = true, these voice fields default to their CUDA values — UNLESS the user
-# set them explicitly in a [voice] table (then their choice wins). int8_float16 is the safe GPU
-# compute type (fast on Pascal like the P4000, fine on newer cards).
+# set them explicitly in a [voice] table (then their choice wins). Kokoro (onnxruntime) and XTTS
+# (torch) degrade gracefully to CPU if the GPU runtime is missing. Whisper is deliberately LEFT on
+# its CPU default: faster-whisper needs separate cuBLAS/cuDNN libs that are heavy and finicky to
+# install, and base.en on CPU is fast enough for push-to-talk. Opt in with whisper_device="cuda".
 _GPU_VOICE_DEFAULTS = {
-    "whisper_device": "cuda",
-    "whisper_compute_type": "int8_float16",
     "kokoro_device": "cuda",
     "xtts_device": "cuda",
 }
