@@ -69,12 +69,13 @@ class VoiceConfig:
     wake_sensitivity: float = 0.5
     picovoice_access_key: str | None = None
 
-    # Text-to-speech engine:
+    # Text-to-speech engine. Defaults to Kokoro so a fresh install speaks with NO keys at all;
+    # switch to elevenlabs (needs a key) or xtts (voice clone) in your .jarvis/config.toml.
+    #   "kokoro"     -> local, free, offline neural TTS (82M model; runs on CPU or GPU) — default
     #   "elevenlabs" -> premium cloud voice (needs a key + credits)
-    #   "kokoro"     -> local, free, offline neural TTS (82M model; runs on CPU or GPU)
     #   "xtts"       -> local zero-shot VOICE CLONE (XTTS-v2): speaks in the timbre of a
     #                   reference clip you provide (xtts_reference). Best on a GPU.
-    tts_engine: str = "elevenlabs"
+    tts_engine: str = "kokoro"
 
     # ElevenLabs (when tts_engine == "elevenlabs").
     elevenlabs_api_key: str | None = None
