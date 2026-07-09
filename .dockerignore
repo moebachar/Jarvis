@@ -1,0 +1,20 @@
+# Keep the build context small and reproducible.
+.git
+.venv
+venv
+__pycache__
+*.py[cod]
+*.egg-info
+build
+dist
+.pytest_cache
+.idea
+.vscode
+
+# Local-only / large / secret — never send to the build
+.env
+.jarvis/state
+*.mp4
+*.mov
+jarvis-voice.wav        # the reference clip is mounted at run time (via /project), not baked
+tests

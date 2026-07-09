@@ -359,11 +359,16 @@ class Orchestrator:
                     "remote voice (transport='browser') needs the dashboard — it IS the "
                     "audio transport. Don't combine --remote with --no-dashboard."
                 ])
-            if d.host not in ("127.0.0.1", "localhost", "::1"):
+            # The mic/brain socket has no auth, so it must never be directly exposed on a LAN.
+            # Loopback is the safe native default; 0.0.0.0 is allowed ONLY for containers, where
+            # the security boundary is the host port mapping (compose maps 127.0.0.1:8765 → the
+            # container) — reach it via that loopback or an SSH tunnel, never a raw LAN IP.
+            safe_hosts = ("127.0.0.1", "localhost", "::1", "0.0.0.0")
+            if d.host not in safe_hosts:
                 raise VoiceConfigError([
-                    f"remote voice requires the dashboard bound to loopback (host is "
-                    f"'{d.host}'). It must be reached over your SSH tunnel, never exposed on "
-                    "the network — a mic-streaming, brain-triggering socket has no auth. Set "
+                    f"remote voice must bind loopback (or 0.0.0.0 inside a container), not "
+                    f"'{d.host}'. A mic-streaming, brain-triggering socket has no auth, so reach "
+                    "it over an SSH tunnel / host port-map — never a raw LAN IP. Set "
                     "[dashboard] host = \"127.0.0.1\"."
                 ])
             from .voice.remote import RemoteAudioHub, build_browser_transport

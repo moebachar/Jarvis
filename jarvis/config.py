@@ -1,16 +1,15 @@
-"""Configuration: layered defaults < global (~/.jarvis) < per-project (.jarvis) < env.
+"""Configuration — ONE layer: the project you run Jarvis in.
 
-Kept dependency-free (stdlib dataclasses + tomllib) so Phase 0 stays lean. Later
-phases simply read the already-present fields (voice / telegram / dashboard).
+There is no install-time or global config. Everything is decided at run time from a single place:
 
-Lookup order, lowest priority first:
-  1. Dataclass defaults below.
-  2. ~/.jarvis/config.toml          (global, applies to every project)
-  3. <project>/.jarvis/config.toml  (per-project override)
-  4. Environment variables for secrets (e.g. ELEVENLABS_API_KEY).
+  1. Dataclass defaults below (the schema — sensible, keyless, GPU-auto).
+  2. <project>/.jarvis/config.toml   (the one file you edit per project; optional).
+  3. Environment variables for SECRETS/tokens only (see _ENV_OVERRIDES) — handy for Docker.
 
-Secrets may also live in ~/.jarvis/.env or <project>/.jarvis/.env (KEY=VALUE lines);
-those are loaded into the environment first, then picked up by the env override step.
+Secrets may also live in <project>/.jarvis/.env or <project>/.env (KEY=VALUE lines); those load
+into the environment first, then the env-override step picks them up. Device selection is
+automatic (kokoro/whisper/xtts default to "auto" → GPU when the runtime sees one, else CPU), so
+there is nothing to configure per machine.
 """
 
 # NOTE: deliberately NOT using `from __future__ import annotations` here — _from_dict()
@@ -108,9 +107,11 @@ class VoiceConfig:
     xtts_sample_rate: int = 24000          # XTTS-v2 native output rate (do not change)
     xtts_model_dir: str | None = None      # None => auto-download the XTTS-v2 checkpoint (Coqui)
 
-    # Speech-to-text (faster-whisper, local).
+    # Speech-to-text (faster-whisper, local). Device is auto: uses the GPU when the runtime
+    # sees one (with cuBLAS/cuDNN present), else the CPU — and the orchestrator falls back to CPU
+    # if a CUDA load fails, so "auto" is always safe. base.en on CPU is fast enough for PTT.
     whisper_model: str = "base.en"
-    whisper_device: str = "cpu"          # "cpu" | "cuda" | "auto"
+    whisper_device: str = "auto"         # "auto" | "cpu" | "cuda"
     whisper_compute_type: str = "int8"   # "int8" | "float16" | "default"
     whisper_beam_size: int = 1           # 1 = fastest; raise for accuracy
 
@@ -199,24 +200,6 @@ class DashboardConfig:
 
 
 @dataclasses.dataclass
-class MachineConfig:
-    """Per-MACHINE profile — declared ONCE per box in ``~/.jarvis/machine.toml`` (written by the
-    installer or ``jarvis --machine-init``). BOTH the installer and the runtime read it, so you
-    never pass GPU flags or hand-edit device fields per machine:
-
-    - installer: ``gpu`` → also install onnxruntime-gpu; ``voice_clone`` → install the XTTS clone.
-    - runtime:   ``gpu`` → default the voice STT/TTS devices to CUDA (see ``_apply_machine_gpu``).
-
-    An explicit ``[voice]`` setting always wins over these derived defaults.
-    """
-    gpu: bool = False          # this box has an NVIDIA GPU
-    voice_clone: bool = False  # the XTTS-v2 voice clone is installed/enabled here
-    cuda: str = "cu121"        # torch CUDA wheel tag for the clone build (cu118 | cu121 | cu124)
-    python: str = ""           # explicit python for the venv ("" = auto; 3.11 suits the clone)
-    extras: str = "all"        # pip extras bundle the installer installs
-
-
-@dataclasses.dataclass
 class JarvisConfig:
     user_title: str = "sir"
     heartbeat_minutes: int = 15
@@ -225,19 +208,15 @@ class JarvisConfig:
     voice: VoiceConfig = dataclasses.field(default_factory=VoiceConfig)
     telegram: TelegramConfig = dataclasses.field(default_factory=TelegramConfig)
     dashboard: DashboardConfig = dataclasses.field(default_factory=DashboardConfig)
-    machine: MachineConfig = dataclasses.field(default_factory=MachineConfig)
 
 
 # --------------------------------------------------------------------------- #
 # Paths
 # --------------------------------------------------------------------------- #
 def global_dir() -> Path:
+    # Not a config layer — only the model/cache home (~/.jarvis/cache/...). In Docker this is
+    # /root/.jarvis, where the image bakes the downloaded models.
     return Path.home() / ".jarvis"
-
-
-def machine_toml_path() -> Path:
-    """The per-machine profile file (installer-owned): ``~/.jarvis/machine.toml``."""
-    return global_dir() / "machine.toml"
 
 
 def project_jarvis_dir(project_dir: Path) -> Path:
@@ -319,7 +298,8 @@ def _from_dict(cls: type, data: dict) -> Any:
     return cls(**kwargs)
 
 
-# Environment variable -> (section, field) overrides for secrets.
+# Environment variable -> (section, field) overrides. Secrets/tokens plus a few knobs the Docker
+# entrypoint sets (host binding, engine, reference clip) so the container needs no config file.
 _ENV_OVERRIDES = {
     "ELEVENLABS_API_KEY": ("voice", "elevenlabs_api_key"),
     "JARVIS_ELEVENLABS_API_KEY": ("voice", "elevenlabs_api_key"),
@@ -330,71 +310,45 @@ _ENV_OVERRIDES = {
     "JARVIS_TELEGRAM_BOT_TOKEN": ("telegram", "bot_token"),
     "JARVIS_TELEGRAM_CHAT_ID": ("telegram", "chat_id"),
     "JARVIS_VOICE_TRANSPORT": ("voice", "transport"),
+    "JARVIS_TTS_ENGINE": ("voice", "tts_engine"),
+    "JARVIS_XTTS_REFERENCE": ("voice", "xtts_reference"),
+    "JARVIS_XTTS_MODEL_DIR": ("voice", "xtts_model_dir"),
+    "JARVIS_WHISPER_MODEL": ("voice", "whisper_model"),
+    "JARVIS_DASHBOARD_HOST": ("dashboard", "host"),
+    "JARVIS_DASHBOARD_PORT": ("dashboard", "port"),
 }
+
+# Fields whose value is really an int (env vars arrive as strings).
+_ENV_INT_FIELDS = {("dashboard", "port")}
 
 
 def _apply_env_overrides(merged: dict) -> None:
     for env_key, (section, field) in _ENV_OVERRIDES.items():
         val = os.environ.get(env_key)
-        if val:
-            merged.setdefault(section, {})[field] = val
-
-
-# When [machine] gpu = true, these voice fields default to their CUDA values — UNLESS the user
-# set them explicitly in a [voice] table (then their choice wins). Kokoro (onnxruntime) and XTTS
-# (torch) degrade gracefully to CPU if the GPU runtime is missing. Whisper is deliberately LEFT on
-# its CPU default: faster-whisper needs separate cuBLAS/cuDNN libs that are heavy and finicky to
-# install, and base.en on CPU is fast enough for push-to-talk. Opt in with whisper_device="cuda".
-_GPU_VOICE_DEFAULTS = {
-    "kokoro_device": "cuda",
-    "xtts_device": "cuda",
-}
-
-
-def _apply_machine_gpu(merged: dict, explicit_voice: set[str]) -> None:
-    """If the machine profile says this box has a GPU, steer the voice models onto CUDA.
-
-    `explicit_voice` is the set of [voice] keys the user set by hand (from the raw TOML files);
-    those are left untouched, so `[machine] gpu = true` fills only the gaps.
-    """
-    if not (merged.get("machine") or {}).get("gpu"):
-        return
-    voice = merged.setdefault("voice", {})
-    for field, val in _GPU_VOICE_DEFAULTS.items():
-        if field not in explicit_voice:
-            voice[field] = val
+        if not val:
+            continue
+        if (section, field) in _ENV_INT_FIELDS:
+            try:
+                val = int(val)
+            except ValueError:
+                continue
+        merged.setdefault(section, {})[field] = val
 
 
 def load_config(project_dir: str | Path) -> JarvisConfig:
+    """Build the config for `project_dir` from the ONE layer (project config) + env secrets."""
     project_dir = Path(project_dir)
 
-    # 1. Load .env files into the environment. _load_dotenv uses setdefault, so the FIRST
-    #    file to define a variable wins — load most-specific first:
-    #    <project>/.jarvis/.env  >  <project>/.env (root)  >  ~/.jarvis/.env (global).
+    # 1. Load the project's .env into the environment (secrets/tokens). setdefault => a value
+    #    already in the real environment (e.g. passed by Docker) wins over the file.
     _load_dotenv(project_jarvis_dir(project_dir) / ".env")
     _load_dotenv(project_dir / ".env")
-    _load_dotenv(global_dir() / ".env")
 
-    # 2. Merge defaults < machine profile < global toml < project toml.
-    #    machine.toml is installer-owned (hardware facts); the user's config.toml wins over it.
-    raw_machine = _read_toml(machine_toml_path())
-    raw_global = _read_toml(global_dir() / "config.toml")
-    raw_project = _read_toml(project_jarvis_dir(project_dir) / "config.toml")
-
-    # Track which [voice] fields the user set BY HAND, so the GPU auto-defaults never clobber them.
-    explicit_voice: set[str] = set()
-    for raw in (raw_machine, raw_global, raw_project):
-        section = raw.get("voice")
-        if isinstance(section, dict):
-            explicit_voice |= set(section.keys())
-
+    # 2. One config layer: dataclass defaults < the project's config.toml.
     merged = dataclasses.asdict(JarvisConfig())
-    merged = _deep_merge(merged, raw_machine)
-    merged = _deep_merge(merged, raw_global)
-    merged = _deep_merge(merged, raw_project)
+    merged = _deep_merge(merged, _read_toml(project_jarvis_dir(project_dir) / "config.toml"))
 
-    # 3. Machine profile → GPU device defaults, then secrets from the environment win.
-    _apply_machine_gpu(merged, explicit_voice)
+    # 3. Secrets / Docker knobs from the environment win.
     _apply_env_overrides(merged)
 
     return _from_dict(JarvisConfig, merged)

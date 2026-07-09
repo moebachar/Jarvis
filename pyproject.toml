@@ -8,9 +8,17 @@ version = "0.1.0"
 description = "A voice-driven, autonomous Claude Code companion you can pull into any project."
 readme = "README.md"
 requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Mohamed BACHAR" }]
+keywords = ["claude", "claude-code", "voice-assistant", "agent", "jarvis", "tts", "stt"]
 dependencies = [
     "claude-agent-sdk>=0.2.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/moebachar/jarvis"
+Repository = "https://github.com/moebachar/jarvis"
+Issues = "https://github.com/moebachar/jarvis/issues"
 
 [project.optional-dependencies]
 # Added in later phases (voice / dashboard / presence). Kept separate so Phase 0 stays lean.

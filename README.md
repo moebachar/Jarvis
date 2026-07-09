@@ -1,291 +1,167 @@
 # J.A.R.V.I.S.
 
-A voice-driven, autonomous Claude Code companion you can pull into any project.
+**A voice-driven, autonomous [Claude Code](https://claude.com/claude-code) companion you pull into any project — with a cinematic dashboard, an Iron-Man persona, and a voice that can be your own.**
 
-Jarvis is a normal Claude Code session — same engine (the Claude Agent SDK), same tools,
-same respect for your `settings.json` — wrapped with a persona and, across phases, voice,
-a cinematic dashboard, and Telegram presence. He lives inside whatever project you launch
-him from and answers strictly from what's actually there.
+Jarvis *is* a Claude Code session — same engine (the [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk)), same tools, same respect for your `settings.json` — wrapped with a persona and a voice, running on your **Claude subscription** (no per-token API bills). Launch it in a folder and it answers, out loud, strictly from what's actually in that project.
 
-## Status: Phases 0–2 complete — brain + voice + dashboard
+![The Jarvis dashboard](screenshot.png)
 
-- ✅ Runs on your **Claude subscription** (no per-token bills); uses the logged-in `claude` CLI.
-- ✅ **Grounded** in the current project (loads `CLAUDE.md` + `settings.json`, uses real tools).
-- ✅ **Autonomous** per your `settings.json` (`permission_mode: auto`).
-- ✅ **In character** — British, addresses you as "sir", concise (built for speaking aloud).
-- ✅ Custom tools (`set_status`, `notify_user`) + activity hooks feed a live event bus.
-- ✅ **Voice** — **push-to-talk**: hold a key (default **Right Ctrl**) to talk, press it again to
-  interrupt. Button-only by default (no wake word); local speech-to-text (faster-whisper),
-  sentence-streamed for low latency, with brief follow-up listening after each reply. As he works he
-  narrates his own progress out loud, briefly ("Searching the web for that… found it"). The **voice
-  is pluggable**: **Kokoro** runs a British male voice **fully local, free, and offline** (no key, no
-  credits — recommended), or **ElevenLabs** for the premium cloud voice when you have credits.
-- ✅ **Dashboard** — a four-panel monitoring HUD, everything visible at once: the audio-reactive
-  Three.js **core**, a **live Claude Code** feed rendered as a raw CLI transcript (your prompts, his
-  tool calls, and replies as they happen), a mini-render of the **latest canvas** (click to open the
-  board), and **session** stats (model, tools used, tokens, uptime). A flat "mission computer" look —
-  double-line console frames, amber+cyan, monospace, no gradients. Served locally over WebSocket;
-  opens automatically with `jarvis` / `jarvis --voice`.
-- ✅ **Cinematic audio** — a synthesized "Stark HUD" sound palette (a distinct cue per action:
-  reading, searching, writing, running, thinking) plus a power-up boot greeting, and minimal
-  spoken progress ("Searching the codebase, sir.") so he keeps you posted while he works. Sounds
-  are generated procedurally (no asset files); spoken lines render once and cache. Audition the
-  palette with `jarvis --demo-sfx`.
-- ✅ **Presence + Telegram** (Phase 3) — Jarvis can work and then *reach you*. Anything he decides
-  is worth saying (`notify_user`) is routed by presence: if you're at the machine he **speaks** it
-  (asking "Sir, are you still here?" first when he's unsure, and listening); if the room's silent
-  he sends it to **Telegram**, where you can reply by text *or* voice note to drive him from your
-  phone. A 15-min heartbeat means he never goes silent forever. Only your own chat can talk to him.
-  Set it up with `jarvis --telegram-id`.
+---
 
-- ✅ **Canvas board** (Phase 4) — a second page (`/canvas`) that's an **infinite whiteboard**. Jarvis
-  renders visuals on demand or his own initiative — Mermaid diagrams ("show me the architecture"),
-  charts, stat cards, screenshots, Markdown — and you arrange them: **pan, zoom, drag to move, resize,
-  delete**, and **click a card to "focus" it** so Jarvis knows what *"this"* means ("make this bigger",
-  "redo it as a chart"). The board is **saved per project** and reloads when you return. A modern
-  graphite/dot-grid design, distinct from the HUD. Via the `show_on_dashboard` tool; libraries vendored (no CDN).
+## Why
 
-- ✅ **Live web fallback** — when a normal `WebFetch`/`WebSearch` can't load a page (JavaScript-heavy,
-  blocked, or one he must see rendered), Jarvis escalates to a **real, visible Chrome** he drives with
-  Playwright (`browse` tool) and reads the live page. Uses a fresh browser profile (not your logins).
-  Optional: install with the `web` extra (`pip install -e .[web]`).
+You already have Claude Code. Jarvis gives it a **face and a voice**: talk to it, watch it think on a live HUD, let it work while you're away and ping you on Telegram, and — if you like — have it answer in a cloned voice. It's one container: run it, open a browser tab, hold a button, and talk.
 
-- ✅ **Packaging** (Phase 5) — one-command install with `install.ps1` / `install.sh`: Jarvis goes
-  into its own isolated `pipx` environment and becomes a global `jarvis` command you can run from any
-  project (`jarvis --init` scaffolds a project's `.jarvis/`). The dashboard can be watched from another
-  machine over an SSH tunnel.
+## Features
 
-Roadmap: remaining Phase 5 — Windows boot **autostart** + restart/resume polish. See `.claude/plans/` for the full plan.
+- 🧠 **It's real Claude Code.** Grounded in the current project (`CLAUDE.md` + `settings.json` + the actual Read/Grep/Glob tools), autonomous per your permissions, on your **subscription**.
+- 🎙️ **Talk to it.** Push-to-talk voice: local speech-to-text ([faster-whisper](https://github.com/SYSTRAN/faster-whisper)), sentence-streamed replies for low latency. It narrates its own progress as it works.
+- 🗣️ **Pick its voice — three engines, one switch.**
+  - **Kokoro** — a British voice, fully **local, free, and offline** (no key). *Default.*
+  - **ElevenLabs** — the premium cloud voice, when you have credits.
+  - **Voice clone (XTTS-v2)** — drop in a reference clip and Jarvis speaks in **that** voice, zero-shot. No training.
+- 🖥️ **A cinematic dashboard.** A four-panel "mission computer" HUD — an audio-reactive particle core, a live Claude Code transcript, a canvas for diagrams/charts/screenshots, and session stats. Served over WebSocket.
+- 🌐 **The browser is the microphone.** In remote mode the dashboard tab captures your mic and plays the reply — so the brain can run on a beefy box (or in Docker) while you just open a tab and forward a port. No audio devices to wrestle with.
+- 📟 **It reaches you.** Works silently on long tasks, then either speaks up or messages you on **Telegram** (reply by text *or* voice note). A heartbeat means it never goes quiet forever.
+- 📦 **One container.** Everything — brain, STT, TTS, models — is baked into a Docker image. Run it, forward the port, done.
 
-## Requirements
+---
 
-- Python ≥ 3.10 (tested on 3.13)
-- The `claude` CLI installed and **logged in** (`claude` once, complete the login) — the brain
-  runs on your Claude subscription through it.
+## Quickstart (Docker)
 
-## Install — pull Jarvis onto any machine
-
-One command. The installer drops Jarvis into its **own isolated environment** (via `pipx`) and
-exposes a global `jarvis` command — no hand-built venv to manage. Clone/pull the repo, then from
-its root:
-
-```powershell
-# Windows
-.\install.ps1                 # detects this machine's GPU automatically; installs the right build
-.\install.ps1 -Gpu            # force GPU support on   (-NoGpu forces it off)
-.\install.ps1 -Clone          # also install the XTTS-v2 voice clone (coqui-tts + a CUDA torch build)
-```
+You need [Docker](https://docs.docker.com/get-docker/) and a Claude **Pro/Max/Team/Enterprise** plan.
 
 ```bash
-# Linux / macOS
-./install.sh                  # same — auto-detects the GPU
-./install.sh --gpu            # force GPU on   (--no-gpu forces off)
-./install.sh --clone          # voice clone
+git clone https://github.com/moebachar/jarvis.git
+cd jarvis
+
+# 1. Authenticate on your subscription (one-time; prints a ~1-year token)
+claude setup-token
+echo "CLAUDE_CODE_OAUTH_TOKEN=<paste-the-token>" > .env
+
+# 2. Build + run (first build pre-fetches the models — a few minutes, once)
+docker compose up --build
+
+# 3. Open the dashboard, hold "HOLD TO TALK", and talk
+#    → http://localhost:8765/
 ```
 
-**One profile per machine.** The installer records this box in `~/.jarvis/machine.toml` (auto-detecting
-the GPU via `nvidia-smi`), and **both** the installer and the runtime read it — so you set GPU *once*
-and never pass flags or hand-edit device fields again. On the GPU desktop it installs `onnxruntime-gpu`
-and the runtime uses CUDA for STT + TTS; on the laptop it stays CPU. Refresh it anytime with:
+That's it. The dashboard is published on **`127.0.0.1:8765`** — a *localhost* address, which is what lets the browser grant microphone access, and it's never exposed on your network.
 
-```powershell
-jarvis --machine-init            # re-detect (or --gpu / --no-gpu to force, --clone to mark the clone)
-```
-
-The installer also bootstraps `pipx` if missing, checks the `claude` CLI is present, and prints the run
-steps. Re-run it any time to upgrade; remove with `pipx uninstall jarvis`.
-
-> Prefer a plain editable dev install instead? `python -m venv .venv && .\.venv\Scripts\python.exe
-> -m pip install -e .[all]` still works.
-
-## Run — from any project
-
-Once installed, `cd` into **any** project and go. Jarvis loads that project's `CLAUDE.md` +
-`settings.json` and answers from its real files.
-
-```powershell
-cd C:\some\project
-jarvis --init               # optional: scaffold .jarvis/ (config.toml + .env.example)
-jarvis                      # text REPL, lives in the current folder
-jarvis --project C:\path    # or point it at a project without cd-ing
-jarvis --resume             # resume this project's previous session
-jarvis --voice              # voice (push-to-talk)   ·   jarvis --remote (tunneled voice)
-```
-
-Type to talk; `exit` to dismiss. Dimmed lines show his live tool use.
-
-## Run (Phase 1 — voice)
-
-By default the voice runs **fully local and free** with **Kokoro** — no account, no key, no credits.
-Install the extra and it just works (the ~340 MB model auto-downloads once to `~/.jarvis/cache/kokoro/`):
-
-```powershell
-.\.venv\Scripts\python.exe -m pip install -e .[kokoro]
-```
-
-`[voice] tts_engine = "kokoro"` (the default in this project's `.jarvis/config.toml`) selects it;
-pick the British male voice with `kokoro_voice` (`bm_george`, `bm_lewis`, `bm_daniel`, `bm_fable`).
-On a machine with an NVIDIA GPU, add `onnxruntime-gpu` and set `[voice] kokoro_device = "cuda"` for
-near-instant synthesis. Preview it with `jarvis --check-voice`.
-
-Prefer the **premium ElevenLabs cloud voice** instead? Set `[voice] tts_engine = "elevenlabs"` and add
-keys in `<project>\.jarvis\.env` (see `.env.example`):
-
-```
-ELEVENLABS_API_KEY=...
-JARVIS_ELEVENLABS_VOICE_ID=...      # a British male voice id (e.g. George / Daniel)
-```
-
-First, check your mic/speakers (no keys needed):
-
-```powershell
-jarvis --check-audio
-```
-
-Then:
-
-```powershell
-jarvis --voice
-```
-
-**Hold Right Ctrl** and talk (push-to-talk), release when done. He keeps listening for a few seconds
-after each reply so you can continue naturally; **press Right Ctrl again while he's talking to cut him
-off**. There's no wake word by default — the key is the only way in. First run downloads the `base.en`
-speech model (~150 MB).
-
-> Push-to-talk uses **Right Ctrl** by default (non-typing, no Fn needed). Change it with `[voice]
-> ptt_key` (e.g. `"alt_r"`, `"pause"`, `"f9"`) in `.jarvis/config.toml`. To also enable the spoken
-> wake word "jarvis" (and voice barge-in), set `[voice] wake_enabled = true`.
-
-> Mic tip: ensure your microphone is unmuted, set as the default input, and that Windows
-> "Let desktop apps access your microphone" is **on** — otherwise the wake word won't hear you.
-
-## Remote voice (desktop brain, laptop dashboard)
-
-Run Jarvis on a powerful machine (e.g. a GPU desktop) and talk to it from another (a laptop) with
-**nothing but a browser tab** on the laptop. The desktop does the brain, speech-to-text, and
-text-to-speech (ideally on its GPU); the browser tab is the microphone and speaker.
-
-```powershell
-# on the DESKTOP, once: the STT + dashboard + local-TTS extras (and onnxruntime-gpu for the GPU)
-.\.venv\Scripts\python.exe -m pip install -e .[voice,dashboard,kokoro]
-.\.venv\Scripts\python.exe -m pip install onnxruntime-gpu
-jarvis --remote        # on the DESKTOP (inside the project)
-```
-
-The dashboard *is* the audio transport, so link the two machines with an SSH port-forward and open
-the tab at **localhost** — that's required, because a browser only grants microphone access in a
-"secure context" (https or `http://localhost`); a bare LAN IP is blocked.
+**Point it at another project** (instead of the Jarvis repo itself):
 
 ```bash
-# on the LAPTOP — forward the desktop's dashboard port to laptop localhost (VS Code Remote-SSH
-# usually does this for you):
-ssh -L 8765:localhost:8765 <desktop-host>
-# then open  http://localhost:8765/  in Chrome/Edge and hold "HOLD TO TALK" (or the space bar).
+JARVIS_PROJECT=/path/to/your/project docker compose up
 ```
 
-Hold the on-screen **HOLD TO TALK** button (or the space bar) to speak; press again to interrupt.
-The browser streams your mic to the desktop, which transcribes → thinks → speaks, streaming the reply
-back to play in the tab. Put STT + TTS on the desktop's GPU with a config profile — see
-[`config.remote-desktop.example.toml`](config.remote-desktop.example.toml) (copy it to the desktop's
-`.jarvis/config.toml`): `whisper_device = "cuda"`, `kokoro_device = "cuda"` (`pip install onnxruntime-gpu`),
-and `whisper_compute_type = "int8_float16"` for older (Pascal, e.g. Quadro P4000) cards. The dashboard
-stays bound to loopback (`127.0.0.1`) — it's reached only through your tunnel, never exposed on the LAN.
-
-## Dashboard
-
-The HUD opens automatically at `http://127.0.0.1:8765/` when you run `jarvis` or `jarvis --voice`.
-Preview/debug it without audio:
-
-```powershell
-jarvis --demo-dashboard      # synthetic events, opens the HUD
-jarvis --demo-canvas         # preview the Canvas page (diagram, chart, stats, notes)
-jarvis --voice --no-dashboard  # run voice without the dashboard
-jarvis --demo-sfx            # audition the action-sound palette (no keys)
-jarvis --voice --no-sfx      # run voice without the cinematic audio
-```
-
-It's a four-panel dashboard, all visible at once: the audio-reactive **bulb** (state + detail), a
-live **Claude Code** feed (your prompts, his tool actions with summaries, and his replies — your
-live debug console), a mini-render of the **latest canvas** (click it to open the board and edit),
-and **session** stats (model, tools used, tokens in/out, session id, uptime). The **Board** page
-(top-bar link, or `/canvas`) is an infinite whiteboard where he renders diagrams, charts, stat
-cards, screenshots, and notes when a picture beats a paragraph — ask him to "show" or "diagram"
-something. **Drag** to pan, **scroll** to zoom; cards can be moved, resized, and removed. **Click a
-card to focus it** and Jarvis will treat "this"/"it" in your next request as that card. Your layout
-is saved per project and restored next time.
-
-### Watching the dashboard from another machine
-
-Run Jarvis (and its project) on one box, watch the dashboard on another. The HUD stays bound to
-**loopback** — it is never exposed on the network (the feed shows your code and prompts, and in
-`--remote` the same socket carries your mic) — so you reach it over an **SSH port-forward**, the
-same tunnel VS Code Remote-SSH already opens:
+**From another machine** (brain on a server, browser on your laptop) — forward the port over SSH, then open the *localhost* URL locally:
 
 ```bash
-# on the viewing machine (e.g. your laptop):
-ssh -L 8765:localhost:8765 <jarvis-host>
-# then open  http://localhost:8765/  locally — it's the dashboard running on the other box.
+ssh -L 8765:localhost:8765 <the-host-running-jarvis>
+# then open http://localhost:8765/ on your laptop
 ```
 
-Jarvis prints this exact hint on startup whenever the dashboard is on. (Advanced/trusted-LAN only:
-set `[dashboard] host = "0.0.0.0"` to bind the network directly — Jarvis warns loudly because
-there's no auth. SSH-forwarding is the recommended way.)
+### GPU (faster synthesis + the voice clone)
 
-> Jarvis unsets `ANTHROPIC_API_KEY` at startup so the brain always uses your subscription.
-> If you keep it set for other tools, that's fine — it's only removed for this process.
+The voice clone (and snappier speech) wants an NVIDIA GPU. Install the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html), then uncomment **`gpus: all`** in `docker-compose.yml`. Without a GPU everything still runs on CPU (Kokoro is faster than real-time on a modern CPU).
 
-## Presence (Telegram)
+### Lean CPU-only image
 
-So Jarvis can reach you when you've stepped away — and you can reply from your phone.
+Skip the heavy voice-clone stack (torch) for a much smaller image:
 
-1. In Telegram, message **@BotFather**, send `/newbot`, and follow the prompts. Copy the token.
-2. Put it in `<project>\.jarvis\.env`:
-   ```
-   TELEGRAM_BOT_TOKEN=7283...:AAH...
-   ```
-3. Find your chat id (so he can message you first):
-   ```powershell
-   jarvis --telegram-id      # starts the bot; message it once; it prints your chat id
-   ```
-   Add the printed id to `.env` as `JARVIS_TELEGRAM_CHAT_ID=...`.
+```bash
+docker compose build --build-arg WITH_CLONE=0 --build-arg GPU=0
+```
 
-Now `jarvis` / `jarvis --voice` start the bridge automatically. When Jarvis finishes something
-worth telling you, he delivers it by **presence**: if you're at the machine he speaks it (in
-voice mode he'll first ask "Sir, are you still here?" and listen if he's unsure you're there);
-if the room is silent it goes to **Telegram**. Reply there by text or voice note and it goes
-straight to the brain (shared session, so voice and Telegram are one continuous conversation).
-A **voice note** is transcribed locally (faster-whisper) and answered like a message, echoing
-back what he heard. Only your configured chat is honoured — the bot ignores everyone else. Run
-with `--no-telegram` to skip the bridge for a session.
+---
 
-Presence tuning lives under `[voice]` in `config.toml`: `presence_fresh_seconds` (how recently
-you must have spoken for him to skip the "still here?" question), `presence_max_seconds` (after
-this long with no local activity he won't try voice at all — straight to Telegram), and
-`presence_prompt` (what he asks).
+## Voice cloning
+
+Make Jarvis sound like a specific voice — no training, just one clean reference clip.
+
+1. Build with the clone engine (the default: `WITH_CLONE=1`) and a GPU.
+2. Put a clean **~15-30 s mono WAV** named **`jarvis-voice.wav`** in your project folder (the one mounted at `/project`).
+3. Start the container. It detects the clip and speaks in that voice automatically.
+
+> ⚖️ **Please use this responsibly.** Cloning a real, identifiable person's voice — e.g. an actor from a film — involves their likeness and the source recording's copyright. Keep cloned output to **personal use**, and don't distribute it. The reference clip is never committed or baked into the image (it's `.gitignore`d and mounted at run time) precisely so a shared image can't carry someone's voice.
+
+---
 
 ## Configuration
 
-Layered, lowest priority first: built-in defaults → `~/.jarvis/config.toml` (global) →
-`<project>/.jarvis/config.toml` (per-project) → environment variables (secrets).
-Secrets may also go in `~/.jarvis/.env` or `<project>/.jarvis/.env`. See `.env.example`.
+**One layer.** There's no install-time or global config — everything is decided at run time from your project's optional `.jarvis/config.toml`, plus environment variables for secrets. Scaffold a starter with `jarvis --init`, or write it yourself:
 
-Phase 0 needs no configuration. Later phases add `voice`, `telegram`, and `dashboard` sections
-and their keys (ElevenLabs, Picovoice, Telegram).
+```toml
+# <your-project>/.jarvis/config.toml
+[voice]
+tts_engine   = "kokoro"     # "kokoro" | "elevenlabs" | "xtts"
+kokoro_voice = "bm_george"  # bm_george | bm_lewis | bm_daniel | bm_fable
+wake_enabled = false        # push-to-talk only (default)
+whisper_model = "base.en"
+whisper_device = "auto"     # auto → GPU if available, else CPU
 
-## Project layout
+[dashboard]
+port = 8765
 
+[telegram]
+enabled = false             # set true + add a bot token to reach you when away
 ```
-jarvis/
-  config.py         layered config (defaults < global < project < env)
-  eventbus.py       async pub/sub
-  state.py          state machine + status snapshot
-  context.py        shared runtime context (config, bus, state, notes)
-  orchestrator.py   wires everything; exposes ask()
-  cli.py            the `jarvis` text REPL
-  brain/
-    persona.py      the Jarvis system-prompt append
-    tools.py        in-process MCP tools (set_status, notify_user)
-    hooks.py        tool-use hooks -> live status
-    agent.py        ClaudeSDKClient wrapper (grounding, autonomy, session resume)
+
+Secrets go in `.env` (never in the TOML), or straight into the container's environment:
+
+| Variable | For |
+|---|---|
+| `CLAUDE_CODE_OAUTH_TOKEN` | **Required.** Subscription auth (from `claude setup-token`). |
+| `ELEVENLABS_API_KEY` / `JARVIS_ELEVENLABS_VOICE_ID` | Only if `tts_engine = "elevenlabs"`. |
+| `TELEGRAM_BOT_TOKEN` / `JARVIS_TELEGRAM_CHAT_ID` | Only for the Telegram bridge. |
+
+> ⚠️ Do **not** set `ANTHROPIC_API_KEY` — it outranks the subscription token and would bill the API. Jarvis unsets it at startup regardless.
+
+---
+
+## How it works
+
+```mermaid
+flowchart LR
+    subgraph Browser["Browser tab (any machine)"]
+        Mic["🎙️ mic → PCM"]
+        Spk["🔊 speaker"]
+        HUD["Dashboard HUD"]
+    end
+    subgraph Container["Jarvis container"]
+        WS["/ws (WebSocket)"]
+        STT["faster-whisper (STT)"]
+        Brain["Claude Agent SDK<br/>(your subscription)"]
+        TTS["Kokoro / ElevenLabs / XTTS"]
+    end
+    Mic -- "16 kHz PCM" --> WS --> STT --> Brain --> TTS -- "PCM" --> WS --> Spk
+    Brain -- "status / feed / canvas" --> HUD
+    Brain -- "reads" --> Project["your project<br/>(mounted)"]
 ```
+
+A single async process runs an event bus, a state machine, the long-lived `ClaudeSDKClient`, and (in remote mode) an audio hub that bridges the dashboard WebSocket to the STT/TTS pipeline. The brain drives the outside world through custom in-process MCP tools; every turn is serialized through one lock so voice, REPL, and Telegram never collide.
+
+---
+
+## Local development (without Docker)
+
+```bash
+python -m venv .venv && . .venv/bin/activate       # Windows: .venv\Scripts\activate
+pip install -e ".[all]"
+jarvis --init          # scaffold .jarvis/ in the current project
+jarvis                 # text REPL   ·   jarvis --voice   ·   jarvis --remote
+```
+
+Handy commands: `jarvis --check-audio` (diagnose mic/speakers), `jarvis --demo-dashboard` (preview the HUD with no audio), `jarvis --telegram-id` (discover your chat id), `jarvis --version`.
+
+---
+
+## Notes & credits
+
+- **Runs on your Claude subscription**, via the Agent SDK — not the pay-per-token API.
+- Front-end libraries (Three.js, Mermaid, Chart.js) are **vendored** (no CDN calls). Speech models (Kokoro, faster-whisper, XTTS-v2) are downloaded from their upstreams at build time and retain their own licenses.
+- The persona is an homage to a fictional character; the project isn't affiliated with or endorsed by anyone.
+
+## License
+
+MIT — see [`LICENSE`](LICENSE).

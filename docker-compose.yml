@@ -1,0 +1,36 @@
+# Jarvis — run the container, open the dashboard, talk.
+#
+#   1.  claude setup-token           # on your host; put the token in a .env file next to this:
+#                                     #   CLAUDE_CODE_OAUTH_TOKEN=...
+#   2.  docker compose up --build     # first build pre-fetches the models (a few minutes)
+#   3.  open http://localhost:8765/   # hold "HOLD TO TALK" and speak
+#
+# Point Jarvis at a different project with:  JARVIS_PROJECT=/path/to/project docker compose up
+services:
+  jarvis:
+    build:
+      context: .
+      args:
+        WITH_CLONE: "1"   # "0" = lean CPU image, no voice clone (smaller, no torch)
+        GPU: "1"          # onnxruntime-gpu + faster-whisper CUDA libs (only used with a GPU)
+        TORCH_INDEX: "https://download.pytorch.org/whl/cu121"  # ".../whl/cpu" for a CPU-only build
+    image: jarvis
+    # Publish to host loopback ONLY: http://localhost:8765 is a secure context (the browser will
+    # grant the mic) and is never exposed on the LAN. From another machine, SSH-forward this port.
+    ports:
+      - "127.0.0.1:8765:8765"
+    environment:
+      # Subscription auth — from `claude setup-token`. Compose reads it from a .env file here.
+      CLAUDE_CODE_OAUTH_TOKEN: "${CLAUDE_CODE_OAUTH_TOKEN}"
+    volumes:
+      # The project Jarvis works on (its CLAUDE.md + settings.json + .jarvis/). Drop a
+      # jarvis-voice.wav in this folder and Jarvis will clone that voice (needs WITH_CLONE=1 + GPU).
+      - "${JARVIS_PROJECT:-.}:/project"
+      # Persist the Claude session + credential cache across restarts.
+      - jarvis-claude:/root/.claude
+    # ---- GPU (voice clone + faster synthesis) --------------------------------------------
+    # Needs the NVIDIA Container Toolkit on the host. Uncomment to pass the GPU through:
+    # gpus: all
+
+volumes:
+  jarvis-claude:

@@ -36,38 +36,43 @@ bus. Subscribers (the REPL now; dashboard/Telegram later) react to those events.
 ## Phases
 0 (done) brain + text REPL · 1 (done) voice · 2 (done) dashboard HUD · 3 (done) sleep/wake (15-min
 heartbeat) + Telegram presence + voice "are you still here?" check · 4 (done) dashboard canvas
-(diagrams/plots/stats/screenshots) · 5 packaging (done — pipx install) + autostart (pending). Full plan:
+(diagrams/plots/stats/screenshots) · 5 packaging = **Docker** (done) + autostart (pending). Full plan:
 `~/.claude/plans/linear-tumbling-waterfall.md`.
 
-### Packaging / install (`install.ps1` + `install.sh` + `jarvis/scaffold.py`, Phase 5)
-"Pull Jarvis onto any machine with one command." The installers bootstrap **pipx** (if absent) and
-`pipx install --force "<repo>[all]"` → Jarvis lands in its OWN isolated env and `jarvis` is a global
-command (no hand-built venv — the user's explicit ask). `all` extra = `jarvis[voice,kokoro,dashboard,
-presence,web]` (NOT clone — torch/GPU-specific). Installer switches: `-Gpu`/`--gpu` (`pipx inject jarvis
-onnxruntime-gpu`), `-Clone`/`--clone` (`pipx inject jarvis coqui-tts` + `pipx runpip jarvis install torch
-… --index-url …/whl/<cuda>` — so even the heavy clone env is scripted, not hand-built; warns to use
-`-Python <py3.11>` since coqui-tts prefers 3.11), `-Extras`/`--extras`, `-Python`/`--python`. Both check
-the `claude` CLI is present (subscription auth) + warn if `ANTHROPIC_API_KEY` is set. `jarvis --init`
-(`scaffold.py init_project`) writes a starter `<project>/.jarvis/{config.toml,.env.example,.gitignore}`
-(keyless Kokoro default; never overwrites existing). `jarvis --version` via importlib.metadata.
-**Per-machine profile (`jarvis/machine.py` + `~/.jarvis/machine.toml`):** the user wanted GPU declared
-ONCE per machine in a config file, not via install flags. So there's a `[machine]` profile (`MachineConfig`
-in config.py: `gpu`/`voice_clone`/`cuda`/`python`/`extras`) in an installer-owned `~/.jarvis/machine.toml`
-that BOTH sides read. Runtime: `_apply_machine_gpu()` (config.py) — when `machine.gpu` is true, it fills the
-voice STT/TTS device fields (`whisper_device`/`whisper_compute_type`=int8_float16/`kokoro_device`/
-`xtts_device`) with their CUDA values, but ONLY for fields the user didn't set by hand (tracked via
-`explicit_voice` from the raw TOMLs); machine.toml is merged BELOW the user's config.toml. Installer:
-`python -m jarvis.machine` prints the RESOLVED profile as `KEY=VALUE` lines (`resolve_profile`: forced
-`JARVIS_FORCE_*` env > existing machine.toml > `detect_gpu()` via nvidia-smi), which install.ps1/.sh parse
-to pick extras + GPU/clone injections, then persist via `jarvis --machine-init` (writes machine.toml;
-`--gpu`/`--no-gpu` force, `--clone` marks it). Net: a bare `.\install.ps1` auto-detects the GPU, installs
-the right build, records the profile, and the runtime uses CUDA — no per-machine flags.
-**Dashboard-from-another-machine:** the HUD frontend already dials `ws://${location.host}/ws`, so an SSH
-port-forward "just works" with ZERO code change; `_dashboard_forward_note()` prints the exact
-`ssh -L <port>:localhost:<port> <host>` hint on startup whenever the dashboard is on (loopback stays the
-secure default; a non-loopback `[dashboard] host` triggers a loud no-auth warning instead). Wheel verified
-to include all `dashboard/static/**` assets + the `all` extra resolves. 51/51 tests (added
-`tests/test_packaging.py`: init_project create/idempotent/preserve + forward-note loopback/LAN/disabled).
+### Packaging = Docker + ONE config layer (Phase 5, rewritten 2026-07-09)
+After a long, painful native-install session (pipx + uv + PATH + CUDA-lib + Python-download-hang issues
+on the user's flaky FabLab network), the user asked to **refactor everything, wrap it in Docker, and keep
+ONE config layer**. So the whole pipx/machine-profile install path was DELETED (`install.ps1`, `install.sh`,
+`jarvis/machine.py`, `--machine-init`/`--gpu`/`--no-gpu`/`--clone` flags, `MachineConfig`, `_apply_machine_gpu`,
+`machine_toml_path`, the two example TOMLs) and replaced by:
+- **`Dockerfile`** (python:3.11-slim): apt (git/curl/ffmpeg/libsndfile1/**libportaudio2** [needed so the
+  top-level `import sounddevice` in listener.py/tts.py doesn't crash headless]/nodejs+npm → `npm i -g
+  @anthropic-ai/claude-code`), `pip install .[all]`, GPU arg (`onnxruntime-gpu` + cuBLAS/cuDNN wheels),
+  clone arg (`torch` from `TORCH_INDEX` + `coqui-tts`). **Models are pre-fetched with `curl`, NOT Python**
+  (Kokoro → `/root/.jarvis/cache/kokoro`, Whisper base.en → `/opt/jarvis/models/whisper-base.en`, XTTS-v2 →
+  `/opt/jarvis/models/xtts`) — curl uses the OS network stack, dodging the Python-download hang that bit us
+  hard. Build args: `WITH_CLONE=1`, `GPU=1`, `TORCH_INDEX=…/cu121`.
+- **`docker-compose.yml`**: publishes `127.0.0.1:8765:8765` (host-loopback → secure mic context, never LAN),
+  `CLAUDE_CODE_OAUTH_TOKEN` env, mounts `${JARVIS_PROJECT:-.}:/project` + a `jarvis-claude:/root/.claude`
+  volume, commented `gpus: all`.
+- **`docker-entrypoint.sh`**: `unset ANTHROPIC_API_KEY` (it OUTRANKS the OAuth token — confirmed via
+  claude-code-guide agent: precedence is API key #3 > `CLAUDE_CODE_OAUTH_TOKEN` #5), sets `JARVIS_DASHBOARD_HOST=
+  0.0.0.0` + the baked model-path envs, and picks the voice: if `/project/jarvis-voice.wav` exists AND `TTS`
+  (coqui) is importable → `xtts` with that reference, else `kokoro`. Runs `jarvis --remote --project /project`.
+**AUTH (subscription in a container):** `CLAUDE_CODE_OAUTH_TOKEN` from `claude setup-token` (~1yr, auto-refresh);
+`~/.claude` (`CLAUDE_CONFIG_DIR=/root/.claude`) must be writable. The `claude` CLI IS installed in the image
+(belt-and-suspenders for the SDK transport).
+**Voice clone on "install":** the reference wav is NOT baked (it's Paul Bettany's copyrighted voice) — it's
+`.gitignore`d (`*.wav`) and read from the MOUNTED project at run time, so a shared image can't carry a voice.
+**ONE config layer** (`config.py` rewritten): dataclass defaults < `<project>/.jarvis/config.toml` < env
+(`_ENV_OVERRIDES`, secrets + Docker knobs `JARVIS_DASHBOARD_HOST`/`_PORT`/`JARVIS_TTS_ENGINE`/`JARVIS_XTTS_REFERENCE`/
+`JARVIS_XTTS_MODEL_DIR`/`JARVIS_WHISPER_MODEL`). Dropped the `~/.jarvis` global layer + machine.toml entirely.
+Device fields (whisper/kokoro/xtts) all default to `"auto"` → GPU if the runtime sees one else CPU; the
+`_build_transcriber` CPU fallback makes whisper `"auto"` safe even without cuBLAS. `jarvis --init` scaffold +
+`_dashboard_forward_note` (SSH-forward hint / LAN warning) kept; the `--remote` guard now also allows `0.0.0.0`
+(container bind; host port-map is the security boundary). `README.md` rewritten for public release (screenshot.png
+committed, MIT LICENSE, mermaid architecture). 53 tests (test_packaging now: init + forward-note + keyless/GPU-auto
+defaults + single-layer load). NOT built/run here (no Docker/GPU on the laptop) — the user builds the image.
 
 ### Dashboard canvas — the infinite board (`jarvis/dashboard/`, Phase 4 — RETIRED 2026-07-05)
 NOTE: the full-page board below was retired at the user's request in favour of the HUD's navigable
@@ -331,7 +336,8 @@ get the page. Optional dep: pyproject `web = ["playwright"]` (channel=chrome nee
 ## Conventions
 - Phase 0 stays dependency-light (stdlib + `claude-agent-sdk`). Voice/dashboard/presence deps
   live in `pyproject.toml` extras and are installed per phase.
-- Config is layered: defaults < `~/.jarvis` < `<project>/.jarvis` < env. Don't hardcode secrets.
+- Config is ONE layer: dataclass defaults < `<project>/.jarvis/config.toml` < env (secrets + Docker
+  knobs). No global `~/.jarvis` config, no machine profile. Device selection is `"auto"`. Don't hardcode secrets.
 - New agent→world capabilities = a new `@tool` in `brain/tools.py` (+ allow-list it).
 
 ## Run / verify

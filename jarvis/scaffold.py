@@ -26,10 +26,10 @@ wake_enabled = false
 ptt_enabled  = true
 ptt_key      = "ctrl_r"        # any pynput key name: ctrl_r, alt_r, space, f9, pause, a letter…
 
-# Speech-to-text (local faster-whisper). GPU is decided PER MACHINE, not here: run
-# `jarvis --machine-init` once on each box (it auto-detects the GPU) and the runtime uses CUDA
-# automatically. Only override whisper_device here if you want to force it for this project.
+# Speech-to-text (local faster-whisper). Device is automatic — GPU when the runtime sees one,
+# else CPU (with a safe CPU fallback). Nothing to configure per machine.
 whisper_model  = "base.en"
+whisper_device = "auto"        # "auto" | "cpu" | "cuda"
 
 [dashboard]
 enabled = true

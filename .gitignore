@@ -29,6 +29,11 @@ Thumbs.db
 *.mp4
 *.mov
 
+# Voice-clone reference clip — a real person's copyrighted voice; kept LOCAL, never published.
+# Mounted into the container at run time (see docker-compose.yml), not committed or baked.
+jarvis-voice.wav
+*.wav
+
 # Stray test artifact
 hello.txt
 
