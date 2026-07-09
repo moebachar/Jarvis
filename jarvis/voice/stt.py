@@ -2,6 +2,12 @@
 
 from __future__ import annotations
 
+import os
+
+# Give the HuggingFace model download a per-request timeout so a stalled connection FAILS with an
+# error instead of hanging forever (a hung download in a worker thread can't even be Ctrl+C'd).
+os.environ.setdefault("HF_HUB_DOWNLOAD_TIMEOUT", "30")
+
 import numpy as np
 from faster_whisper import WhisperModel
 

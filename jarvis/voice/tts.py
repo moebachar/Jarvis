@@ -293,7 +293,14 @@ def _kokoro_paths(voice_config) -> tuple[str, str]:
 
 
 def _ensure_kokoro_models(model_path: str, voices_path: str) -> None:
-    """Download the ONNX model + voices to the cache on first use (once). Blocking."""
+    """Download the ONNX model + voices to the cache on first use (once). Blocking.
+
+    Uses a socket timeout + a couple of retries so a stalled connection FAILS instead of hanging
+    forever (a no-timeout download can't even be Ctrl+C'd since it blocks in native I/O). If the
+    download can't reach GitHub, place the two files in the cache dir by hand — see the error.
+    """
+    import shutil
+    import time
     import urllib.request
 
     for path, url in ((model_path, _KOKORO_MODEL_URL), (voices_path, _KOKORO_VOICES_URL)):
@@ -302,8 +309,26 @@ def _ensure_kokoro_models(model_path: str, voices_path: str) -> None:
             continue
         p.parent.mkdir(parents=True, exist_ok=True)
         tmp = p.with_suffix(p.suffix + ".part")
-        urllib.request.urlretrieve(url, tmp)  # noqa: S310 (trusted GitHub release)
-        tmp.replace(p)
+        last_err: Exception | None = None
+        for attempt in range(3):
+            try:
+                print(f"   Downloading {p.name} (attempt {attempt + 1}/3)…", flush=True)
+                req = urllib.request.Request(url, headers={"User-Agent": "jarvis"})
+                with urllib.request.urlopen(req, timeout=30) as r, open(tmp, "wb") as fh:  # noqa: S310
+                    shutil.copyfileobj(r, fh, length=1 << 20)
+                tmp.replace(p)
+                last_err = None
+                break
+            except Exception as exc:  # network stall / DNS / HTTP error
+                last_err = exc
+                tmp.unlink(missing_ok=True)
+                time.sleep(2)
+        if last_err is not None:
+            raise RuntimeError(
+                f"Couldn't download the Kokoro model '{p.name}' from {url} ({last_err}). "
+                f"If this machine can't reach GitHub, download the file elsewhere and place it at "
+                f"{p} (also kokoro-v1.0.onnx + voices-v1.0.bin), then rerun."
+            ) from last_err
 
 
 def load_kokoro(voice_config):
