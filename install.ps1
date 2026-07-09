@@ -106,6 +106,10 @@ if (-not $havePipx) {
 
 # 4. Install Jarvis from THIS repo into its own environment --------------------------------
 Info "Installing jarvis[$useExtras] from $RepoPath ..."
+# Remove any prior/partial jarvis venv first so the install starts clean. pipx's uv backend
+# refuses to overwrite a venv it didn't create this session, so `--force` alone fails on a
+# re-run - uninstalling sidesteps that. Best-effort: ignore the exit code if it wasn't installed.
+& $Py @PyArgs -m pipx uninstall jarvis
 $spec = "$RepoPath[$useExtras]"
 $installArgs = @("install", "--force", $spec)
 if ($usePython) { $installArgs += @("--python", $usePython) }

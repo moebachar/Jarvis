@@ -70,6 +70,9 @@ fi
 
 # 4. Install Jarvis -----------------------------------------------------------------------
 info "Installing jarvis[$USE_EXTRAS] from $REPO …"
+# Remove any prior/partial jarvis venv first (pipx's uv backend won't overwrite a venv it didn't
+# create this session, so --force alone fails on a re-run). Best-effort: ignore if not installed.
+"$PY" -m pipx uninstall jarvis 2>/dev/null || true
 INSTALL_ARGS=(-m pipx install --force "$REPO[$USE_EXTRAS]")
 [ -n "$USE_PYTHON" ] && INSTALL_ARGS+=(--python "$USE_PYTHON")
 "$PY" "${INSTALL_ARGS[@]}"
