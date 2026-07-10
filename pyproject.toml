@@ -29,16 +29,18 @@ voice = [
     "faster-whisper",   # local speech-to-text
     "elevenlabs",       # premium British TTS voice
     "numpy",            # audio buffers / energy VAD
-    "pynput",           # push-to-talk: hold a key to listen (no wake word)
 ]
+# LOCAL push-to-talk only (hold a key on THIS machine's keyboard). Pulls pynput → evdev, which
+# needs a C compiler + kernel headers to build on Linux, so it is NOT in `all` and NOT in the
+# container (which uses the browser's push-to-talk, never the local keyboard).
+desktop = ["pynput"]
 # Local, free, offline TTS — the Kokoro-82M voice via ONNX Runtime + a bundled espeak
 # phonemizer (no torch, no spaCy, no C compiler). Set [voice] tts_engine = "kokoro".
 # For GPU (e.g. a Quadro/RTX box) additionally install onnxruntime-gpu.
 kokoro = ["kokoro-onnx", "onnxruntime", "soundfile"]
 # Local zero-shot VOICE CLONE — XTTS-v2 via coqui-tts (brings torch). Set [voice]
 # tts_engine = "xtts" and point xtts_reference at a clean ~15 s clip of the target voice.
-# HEAVY + torch-bound: best in its OWN environment (Python 3.11 recommended), and for real-time
-# install a CUDA torch build. See config.voice-clone.example.toml.
+# HEAVY + torch-bound; for real-time install a CUDA torch build. The Docker image bakes this in.
 clone = ["coqui-tts"]
 # Optional alternative wake engine (single word "jarvis") via Picovoice; needs a free key.
 porcupine = ["pvporcupine"]
@@ -55,9 +57,9 @@ presence = [
 web = [
     "playwright",
 ]
-# One-shot "everything a normal Jarvis needs" — voice + local free TTS + dashboard + Telegram +
-# web browsing. This is the default install target (the installer uses jarvis[all]). It does NOT
-# include `clone` (XTTS/torch, GPU-specific) — add that separately with the installer's -Clone.
+# Everything the container needs — voice + local free TTS + dashboard + Telegram + web browsing.
+# The Docker image installs jarvis[all]. It does NOT include `desktop` (local-keyboard PTT; the
+# browser is the PTT in the container) or `clone` (torch/XTTS; the Dockerfile adds that on its own).
 all = ["jarvis[voice,kokoro,dashboard,presence,web]"]
 
 [project.scripts]

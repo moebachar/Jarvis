@@ -147,7 +147,7 @@ A single async process runs an event bus, a state machine, the long-lived `Claud
 
 ```bash
 python -m venv .venv && . .venv/bin/activate       # Windows: .venv\Scripts\activate
-pip install -e ".[all]"
+pip install -e ".[all]"          # add ,desktop for local keyboard push-to-talk: ".[all,desktop]"
 jarvis --init          # scaffold .jarvis/ in the current project
 jarvis                 # text REPL   ·   jarvis --voice   ·   jarvis --remote
 ```
