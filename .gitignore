@@ -29,10 +29,11 @@ Thumbs.db
 *.mp4
 *.mov
 
-# Voice-clone reference clip — a real person's copyrighted voice; kept LOCAL, never published.
-# Mounted into the container at run time (see docker-compose.yml), not committed or baked.
-jarvis-voice.wav
+# NOTE: the voice-clone reference clip (jarvis-voice.wav) IS committed to this PRIVATE repo so
+# every collaborator gets the same voice. Keep this repository PRIVATE — it carries a reference
+# voice that must not be redistributed. Other .wav files stay ignored.
 *.wav
+!jarvis-voice.wav
 
 # Stray test artifact
 hello.txt

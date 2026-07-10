@@ -83,7 +83,7 @@ Make Jarvis sound like a specific voice — no training, just one clean referenc
 2. Put a clean **~15-30 s mono WAV** named **`jarvis-voice.wav`** in your project folder (the one mounted at `/project`).
 3. Start the container. It detects the clip and speaks in that voice automatically.
 
-> ⚖️ **Please use this responsibly.** Cloning a real, identifiable person's voice — e.g. an actor from a film — involves their likeness and the source recording's copyright. Keep cloned output to **personal use**, and don't distribute it. The reference clip is never committed or baked into the image (it's `.gitignore`d and mounted at run time) precisely so a shared image can't carry someone's voice.
+> ⚖️ **Use this responsibly.** Cloning a real, identifiable person's voice — e.g. an actor from a film — involves their likeness and the source recording's copyright. Keep it to **personal use** and **do not distribute** the clip or its output. This deployment ships a reference clip inside the repo, so **keep this repository private** — never make it public or share the image while it carries someone's voice.
 
 ---
 
