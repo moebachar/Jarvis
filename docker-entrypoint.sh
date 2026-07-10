@@ -17,17 +17,23 @@ if [ -d /opt/jarvis/models/xtts ]; then
   export JARVIS_XTTS_MODEL_DIR="${JARVIS_XTTS_MODEL_DIR:-/opt/jarvis/models/xtts}"
 fi
 
-# Voice selection (unless the caller pinned JARVIS_TTS_ENGINE): if the project provides a
-# reference clip AND the clone engine is installed, clone that voice; otherwise free Kokoro.
-REF="/project/jarvis-voice.wav"
+# Voice selection (unless the caller pinned JARVIS_TTS_ENGINE): use the reference clip — first
+# one the mounted project provides, else the one baked into the image — and clone it if the clone
+# engine is installed; otherwise fall back to the free Kokoro voice.
+REF=""
+if [ -f /project/jarvis-voice.wav ]; then
+  REF=/project/jarvis-voice.wav
+elif [ -f /opt/jarvis/jarvis-voice.wav ]; then
+  REF=/opt/jarvis/jarvis-voice.wav
+fi
 if [ -z "$JARVIS_TTS_ENGINE" ]; then
-  if [ -f "$REF" ] && python -c "import importlib.util,sys; sys.exit(0 if importlib.util.find_spec('TTS') else 1)" 2>/dev/null; then
+  if [ -n "$REF" ] && python -c "import importlib.util,sys; sys.exit(0 if importlib.util.find_spec('TTS') else 1)" 2>/dev/null; then
     export JARVIS_TTS_ENGINE=xtts
     export JARVIS_XTTS_REFERENCE="${JARVIS_XTTS_REFERENCE:-$REF}"
     echo "[jarvis] voice clone enabled — cloning $REF"
   else
     export JARVIS_TTS_ENGINE=kokoro
-    if [ -f "$REF" ]; then
+    if [ -n "$REF" ]; then
       echo "[jarvis] found $REF but the clone engine isn't in this image — using Kokoro. Rebuild with --build-arg WITH_CLONE=1."
     fi
   fi

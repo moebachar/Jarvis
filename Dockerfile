@@ -75,6 +75,11 @@ RUN if [ "$WITH_CLONE" = "1" ]; then \
          done; \
     fi
 
+# Bake the voice-clone reference clip into the image (the `[v]` glob makes it optional — the
+# build still works if the repo has no clip). The entrypoint prefers a clip in the mounted
+# project, then falls back to this one, so the cloned voice works for ANY project.
+COPY jarvis-voice.wa[v] /opt/jarvis/
+
 COPY docker-entrypoint.sh /usr/local/bin/jarvis-entrypoint
 RUN chmod +x /usr/local/bin/jarvis-entrypoint
 

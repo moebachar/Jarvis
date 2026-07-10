@@ -16,5 +16,6 @@ dist
 .jarvis/state
 *.mp4
 *.mov
-jarvis-voice.wav        # the reference clip is mounted at run time (via /project), not baked
 tests
+# NOTE: jarvis-voice.wav IS sent to the build (baked into the image) so the cloned voice works
+# for ANY mounted project, not only the jarvis repo. Keep the image + repo private.
