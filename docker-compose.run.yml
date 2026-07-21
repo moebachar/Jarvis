@@ -1,0 +1,31 @@
+# Run Jarvis in ANY project WITHOUT building — pulls the pre-built image from GHCR.
+#
+#   1.  claude setup-token            # once; put it in a .env file next to this one:
+#                                      #   CLAUDE_CODE_OAUTH_TOKEN=...
+#   2.  docker login ghcr.io          # GitHub username + a PAT with read:packages
+#   3a. run it on THIS folder:         docker compose -f docker-compose.run.yml up
+#   3b. run it on another project:     JARVIS_PROJECT=/path/to/project docker compose -f docker-compose.run.yml up
+#   4.  open http://localhost:8765/    # hold "HOLD TO TALK" and speak
+#
+# The image is private (it carries the cloned voice); `docker login ghcr.io` is what lets you pull it.
+services:
+  jarvis:
+    image: ghcr.io/moebachar/jarvis:latest
+    pull_policy: always # always fetch the newest published image
+    ports:
+      # Loopback only: http://localhost:8765 is a secure context (browser grants the mic) and is
+      # never exposed on the LAN. From another machine, SSH-forward this port.
+      - "127.0.0.1:8765:8765"
+    environment:
+      CLAUDE_CODE_OAUTH_TOKEN: "${CLAUDE_CODE_OAUTH_TOKEN}"
+    volumes:
+      # The project Jarvis works on. Defaults to the current folder; override with JARVIS_PROJECT.
+      # Drop a jarvis-voice.wav in here to clone a different voice (needs a GPU).
+      - "${JARVIS_PROJECT:-.}:/project"
+      - "jarvis-claude:/root/.claude"
+    # GPU (voice clone + fast synthesis): needs the NVIDIA Container Toolkit on the host.
+    # Comment this out on a machine with no NVIDIA GPU (Jarvis falls back to CPU).
+    gpus: all
+
+volumes:
+  jarvis-claude:

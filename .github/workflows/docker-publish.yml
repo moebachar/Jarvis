@@ -1,0 +1,77 @@
+# Build the full Jarvis image in the cloud and push it to GHCR, so no one ever repeats the
+# multi-hour local build. GitHub's runners have a fast, unthrottled network — the torch wheels and
+# the ~1.8 GB XTTS checkpoint that took ~18 h on the FabLab link download here in minutes.
+#
+# The image is FULL (WITH_CLONE=1, GPU=1) and carries the cloned voice, so the GHCR package MUST
+# stay PRIVATE — same reason this repo is private. Never flip the package to public.
+#
+# After the first successful run, pull it on any machine:
+#     docker login ghcr.io                 # username = your GitHub name, password = a PAT (read:packages)
+#     docker pull ghcr.io/moebachar/jarvis:latest
+name: Build & publish Jarvis image
+
+on:
+  push:
+    branches: [main]
+    # Only rebuild when something that lands in the image changes.
+    paths:
+      - "Dockerfile"
+      - "docker-fetch-wheels.sh"
+      - "docker-entrypoint.sh"
+      - "pyproject.toml"
+      - "jarvis/**"
+      - "jarvis-voice.wav"
+      - ".github/workflows/docker-publish.yml"
+  workflow_dispatch: {} # also runnable by hand from the Actions tab
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write # push to GHCR with the built-in GITHUB_TOKEN — no extra secret needed
+    steps:
+      # The full image is ~12 GB; the default runner doesn't have room, so reclaim ~30 GB first.
+      - name: Free up runner disk
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: true
+          large-packages: true
+          docker-images: true
+          swap-storage: true
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # GHCR image names must be lowercase; derive it from the repo owner.
+      - name: Resolve image name
+        id: img
+        run: echo "name=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/jarvis" >> "$GITHUB_OUTPUT"
+
+      - name: Build & push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ steps.img.outputs.name }}:latest
+            ${{ steps.img.outputs.name }}:${{ github.sha }}
+          build-args: |
+            WITH_CLONE=1
+            GPU=1
+            TORCH_INDEX=https://download.pytorch.org/whl/cu121
+          # Keep a single plain image manifest (no attestation/provenance) — simplest to pull/run.
+          provenance: false
+          # Reuse layers between runs to keep rebuilds quick.
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

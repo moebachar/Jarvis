@@ -31,26 +31,55 @@ You already have Claude Code. Jarvis gives it a **face and a voice**: talk to it
 
 You need [Docker](https://docs.docker.com/get-docker/) and a Claude **Pro/Max/Team/Enterprise** plan.
 
-```bash
-git clone https://github.com/moebachar/jarvis.git
-cd jarvis
+### Fastest — pull the pre-built image (no build)
 
+The whole stack (brain, STT, TTS, torch, and every model) is baked into one image and published to
+GHCR by CI, so you never build anything — you just pull it. This is the way to drop Jarvis into any
+project in a couple of minutes.
+
+```bash
 # 1. Authenticate on your subscription (one-time; prints a ~1-year token)
 claude setup-token
 echo "CLAUDE_CODE_OAUTH_TOKEN=<paste-the-token>" > .env
 
-# 2. Build + run (first build pre-fetches the models — a few minutes, once)
-docker compose up --build
+# 2. Log in to the registry once (the image is private — username = your GitHub name, password = a
+#    Personal Access Token with the read:packages scope)
+docker login ghcr.io
 
-# 3. Open the dashboard, hold "HOLD TO TALK", and talk
-#    → http://localhost:8765/
+# 3. From INSIDE any project folder, pull + run (mounts that folder as the project):
+curl -O https://raw.githubusercontent.com/moebachar/jarvis/main/docker-compose.run.yml
+docker compose -f docker-compose.run.yml up
+
+# 4. Open the dashboard, hold "HOLD TO TALK", and talk  → http://localhost:8765/
 ```
 
-That's it. The dashboard is published on **`127.0.0.1:8765`** — a *localhost* address, which is what lets the browser grant microphone access, and it's never exposed on your network.
+First run downloads the image layers (resumable, once); every run after is instant. On a box with no
+NVIDIA GPU, comment out the `gpus: all` line in `docker-compose.run.yml` (Jarvis falls back to CPU).
 
-**Point it at another project** (instead of the Jarvis repo itself):
+Prefer a one-liner over a compose file? From any project directory:
 
 ```bash
+docker run --rm -it --gpus all -p 127.0.0.1:8765:8765 \
+  -e CLAUDE_CODE_OAUTH_TOKEN=$CLAUDE_CODE_OAUTH_TOKEN \
+  -v "$PWD:/project" -v jarvis-claude:/root/.claude \
+  ghcr.io/moebachar/jarvis:latest
+```
+
+The dashboard is published on **`127.0.0.1:8765`** — a *localhost* address, which is what lets the
+browser grant microphone access, and it's never exposed on your network.
+
+### Build it yourself (maintainers)
+
+```bash
+git clone https://github.com/moebachar/jarvis.git
+cd jarvis
+claude setup-token
+echo "CLAUDE_CODE_OAUTH_TOKEN=<paste-the-token>" > .env
+
+# First build pre-fetches torch + the models — slow once, then cached.
+docker compose up --build
+
+# Point it at another project instead of the repo itself:
 JARVIS_PROJECT=/path/to/your/project docker compose up
 ```
 
