@@ -65,6 +65,15 @@ RUN --mount=type=cache,id=jarvis-pip,target=/root/.cache/pip \
 # This is the set that kept dying on the throttled link (torch, cuDNN 665 MB, cuBLAS, coqui-tts).
 # docker-fetch-wheels.sh routes every wheel through resumable curl; /wheels is a cache mount so a
 # failed build keeps its downloaded bytes. See that script for the full rationale.
+#
+# VERSIONS ARE PINNED, and it matters — left unpinned, pip pulls the bleeding edge from PyPI and
+# you get a container that builds but can't talk:
+#  · torch/torchaudio +cu121 come ONLY from the pytorch index. PyPI's default torch is now a CUDA-13
+#    build; this GPU's driver is CUDA 12.x, so a CUDA-13 torch can't see the card and XTTS crawls on
+#    CPU. The cu121 wheels also bundle the cuBLAS/cuDNN that faster-whisper's GPU path loads.
+#  · coqui-tts 0.25.3 is the XTTS release that caps transformers<=4.46.2. Newer transformers deleted
+#    `isin_mps_friendly`, which XTTS imports — so an unpinned transformers (5.x) kills voice warm-up.
+# A lean GPU build (no clone) instead gets onnxruntime-gpu, only for Kokoro on CUDA.
 COPY docker-fetch-wheels.sh /usr/local/bin/jarvis-fetch-wheels
 RUN chmod +x /usr/local/bin/jarvis-fetch-wheels
 # If the link drops mid-fetch this step fails on purpose (no soft fallback) — the downloaded bytes
@@ -72,10 +81,19 @@ RUN chmod +x /usr/local/bin/jarvis-fetch-wheels
 RUN --mount=type=cache,id=jarvis-pip,target=/root/.cache/pip \
     --mount=type=cache,id=jarvis-wheels,target=/wheels \
     set -e; \
-    HEAVY=""; \
-    [ "$WITH_CLONE" = "1" ] && HEAVY="$HEAVY torch torchaudio coqui-tts"; \
-    [ "$GPU" = "1" ] && HEAVY="$HEAVY onnxruntime-gpu nvidia-cublas-cu12 nvidia-cudnn-cu12"; \
+    if [ "$WITH_CLONE" = "1" ]; then \
+      HEAVY="torch==2.5.1+cu121 torchaudio==2.5.1+cu121 coqui-tts==0.25.3 transformers==4.46.2"; \
+    elif [ "$GPU" = "1" ]; then \
+      HEAVY="onnxruntime-gpu"; \
+    else \
+      HEAVY=""; \
+    fi; \
     if [ -n "$HEAVY" ]; then jarvis-fetch-wheels "$TORCH_INDEX" $HEAVY; fi
+
+# faster-whisper's ctranslate2 dlopens libcudnn/libcublas by soname. torch installs them via the
+# nvidia-*-cu12 packages but not on the default loader path, so point the loader at them explicitly
+# — otherwise STT silently falls back to CPU depending on import order.
+ENV LD_LIBRARY_PATH=/usr/local/lib/python3.11/site-packages/nvidia/cudnn/lib:/usr/local/lib/python3.11/site-packages/nvidia/cublas/lib
 
 # ---- pre-fetch models with curl (no Python downloads → no hangs at first run) -------------
 # Models curl into a cache mount (resumable, survives a failed build) then copy into the image
